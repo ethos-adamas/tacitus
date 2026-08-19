@@ -1,6 +1,6 @@
 # Messaggistica privata
 
-Secret Chat consente a due persone contemporaneamente online di stabilire un contatto consensuale e scambiarsi testo cifrato senza affidare i contenuti al server.
+Tacitus consente a due persone contemporaneamente online di stabilire un contatto consensuale e scambiarsi testo cifrato senza affidare i contenuti al server.
 
 ## Language
 

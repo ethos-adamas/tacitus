@@ -63,7 +63,7 @@ flowchart LR
     B --- LB[(localStorage<br/>ciphertext)]
 ```
 
-Il backend serve anche il build statico di Vite, così frontend e WebSocket condividono lo stesso origin.
+Frontend e backend sono distribuiti separatamente. L'Ingress instrada `/` al frontend e `/ws` al backend, mantenendo lo stesso origin.
 
 ### 4.1 Frontend
 
@@ -609,14 +609,12 @@ La registrazione delle relazioni è un'eccezione consapevole alla natura privacy
 
 ## 19. Deployment
 
-### 19.1 Immagine
+### 19.1 Immagini
 
-Una sola immagine multi-stage:
+GitHub Actions produce gli artefatti e li inserisce in due immagini runtime:
 
-1. build del frontend Vite;
-2. build release del backend Rust;
-3. immagine runtime con binario e `dist/`;
-4. Axum serve asset, `/ws` e `/health`.
+1. Nginx serve il build statico del frontend;
+2. il binario Axum serve `/ws` e `/health`.
 
 `GET /health` restituisce `200` con:
 
@@ -626,10 +624,11 @@ Una sola immagine multi-stage:
 
 ### 19.2 Produzione V1
 
-- Kubernetes con `replicas: 1`.
+- Kubernetes con un Deployment frontend e un Deployment backend.
+- Il backend usa `replicas: 1` e strategia `Recreate`, perché lo stato è in memoria.
 - TLS terminato dall'Ingress.
 - Nessun volume persistente richiesto.
-- Un riavvio del pod equivale al riavvio backend descritto sopra.
+- Un riavvio del pod backend equivale al riavvio backend descritto sopra.
 - Nessuna sticky session necessaria finché esiste una sola replica.
 
 ### 19.3 Sviluppo
@@ -708,7 +707,7 @@ La V1 è completata quando:
 - `Disconnetti` e `Cancella dati` rispettano le semantiche definite;
 - refresh e riavvio browser non cancellano la cronologia;
 - riavvio backend cancella tutto lo stato server volatile;
-- l'immagine unica parte con una replica e risponde su `/health`;
+- le due immagini runtime partono e il backend risponde su `/health`;
 - tutti i test minimi passano.
 
 ## 23. Riferimenti

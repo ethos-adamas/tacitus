@@ -1,0 +1,5 @@
+*
+!Dockerfile
+!target/
+!target/release/
+!target/release/tacitus-backend

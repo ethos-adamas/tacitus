@@ -8,7 +8,7 @@ use axum::{
         State,
         ws::{Message, WebSocket, WebSocketUpgrade},
     },
-    http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header},
+    http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
     routing::{any, get},
 };
@@ -19,7 +19,6 @@ use state::{
 };
 use std::{
     env,
-    path::Path,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -27,10 +26,6 @@ use tokio::{
     net::TcpListener,
     sync::{RwLock, Semaphore, mpsc},
     time::{interval, timeout},
-};
-use tower_http::{
-    services::{ServeDir, ServeFile},
-    set_header::SetResponseHeaderLayer,
 };
 
 type SharedState = Arc<RwLock<AppState>>;
@@ -86,33 +81,9 @@ enum ClientFrame {
 #[tokio::main]
 async fn main() {
     let state = Arc::new(RwLock::new(AppState::default()));
-    let static_dir = env::var("STATIC_DIR").unwrap_or_else(|_| {
-        if Path::new("dist").exists() {
-            "dist".into()
-        } else {
-            "../secret-chat-fe/dist".into()
-        }
-    });
-    let fallback = ServeDir::new(&static_dir)
-        .not_found_service(ServeFile::new(format!("{static_dir}/index.html")));
     let app = Router::new()
         .route("/health", get(health))
         .route("/ws", any(websocket))
-        .fallback_service(fallback)
-        .layer(SetResponseHeaderLayer::overriding(
-            HeaderName::from_static("referrer-policy"),
-            HeaderValue::from_static("no-referrer"),
-        ))
-        .layer(SetResponseHeaderLayer::overriding(
-            HeaderName::from_static("x-content-type-options"),
-            HeaderValue::from_static("nosniff"),
-        ))
-        .layer(SetResponseHeaderLayer::overriding(
-            header::CONTENT_SECURITY_POLICY,
-            HeaderValue::from_static(
-                "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self' 'wasm-unsafe-eval'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'",
-            ),
-        ))
         .with_state(state);
     let address = env::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0:3000".into());
     let listener = TcpListener::bind(address).await.expect("bind server");
@@ -572,6 +543,7 @@ async fn shutdown_signal() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::http::HeaderValue;
 
     #[test]
     fn origin_must_match_host_and_forwarded_scheme() {
