@@ -5,7 +5,7 @@ import {
   changeContactKey,
   createContact,
   type ContactKey,
-  type MessagePayload,
+  type MessageContent,
 } from './domain'
 import { serializeLocalData } from './secure-chat'
 
@@ -20,7 +20,7 @@ const newKey: ContactKey = {
   userIds: ['Alice <alice@example.test>'],
 }
 
-function incoming(overrides: Partial<MessagePayload> = {}): MessagePayload {
+function incoming(overrides: Partial<MessageContent> = {}): MessageContent {
   return {
     v: 1,
     message_id: 'message-1',

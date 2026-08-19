@@ -28,6 +28,10 @@ _Avoid_: Relazione, stanza, canale
 Un testo firmato e cifrato per entrambe le Identità di una Relazione.
 _Avoid_: Payload, messaggio in chiaro
 
+**Contenuto del messaggio**:
+Il testo e i dati di relazione autenticati dalla firma prima della cifratura.
+_Avoid_: Payload
+
 **Evento locale**:
 Una voce della Conversazione generata dal browser, non inviata e non cifrata, che registra un cambiamento rilevante come un nuovo fingerprint.
 _Avoid_: Messaggio di sistema

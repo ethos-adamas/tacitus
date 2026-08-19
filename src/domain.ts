@@ -9,7 +9,7 @@ export type ContactKey = {
   userIds: string[]
 }
 
-export type MessagePayload = {
+export type MessageContent = {
   v: 1
   message_id: string
   relationship_epoch: string
@@ -127,11 +127,11 @@ export function changeContactKey(
   }
 }
 
-export function createMessagePayload(
+export function createMessageContent(
   text: string,
   fromFingerprint: string,
   contact: Contact,
-): MessagePayload {
+): MessageContent {
   if (!contact.relationshipEpoch || contact.status !== 'active' || !contact.online) {
     throw new Error('Il contatto non è disponibile.')
   }
@@ -154,27 +154,27 @@ export function createMessagePayload(
 export function acceptIncomingMessage(
   contact: Contact,
   ownFingerprint: string,
-  payload: MessagePayload,
+  content: MessageContent,
 ): Contact {
   if (
-    payload.v !== 1 ||
-    payload.from_fingerprint !== contact.currentFingerprint ||
-    payload.to_fingerprint !== ownFingerprint ||
-    payload.relationship_epoch !== contact.relationshipEpoch ||
-    !Number.isSafeInteger(payload.sequence) ||
-    payload.sequence <= contact.highestReceivedSequence ||
-    contact.receivedMessageIds.includes(payload.message_id) ||
-    !payload.message_id ||
-    !payload.created_at ||
-    typeof payload.text !== 'string' ||
-    payload.text.length > MAX_MESSAGE_LENGTH
+    content.v !== 1 ||
+    content.from_fingerprint !== contact.currentFingerprint ||
+    content.to_fingerprint !== ownFingerprint ||
+    content.relationship_epoch !== contact.relationshipEpoch ||
+    !Number.isSafeInteger(content.sequence) ||
+    content.sequence <= contact.highestReceivedSequence ||
+    contact.receivedMessageIds.includes(content.message_id) ||
+    !content.message_id ||
+    !content.created_at ||
+    typeof content.text !== 'string' ||
+    content.text.length > MAX_MESSAGE_LENGTH
   ) {
     throw new Error('Messaggio rifiutato: firma o sequenza non valida.')
   }
 
   return {
     ...contact,
-    highestReceivedSequence: payload.sequence,
-    receivedMessageIds: [...contact.receivedMessageIds, payload.message_id],
+    highestReceivedSequence: content.sequence,
+    receivedMessageIds: [...contact.receivedMessageIds, content.message_id],
   }
 }

@@ -10,7 +10,7 @@ import {
   type PrivateKey,
   type PublicKey,
 } from 'openpgp'
-import type { Contact, ContactKey, MessagePayload } from './domain'
+import type { Contact, ContactKey, MessageContent } from './domain'
 
 const IDENTITY_KEY = 'secret-chat.identity.v1'
 const DATA_PREFIX = 'secret-chat.data.v1.'
@@ -51,7 +51,6 @@ export async function importIdentityKeys(
   passphrase: string,
 ): Promise<IdentityKeys> {
   assertKeySize(publicArmoredKey)
-  assertKeySize(privateArmoredKey)
   const publicKey = await readKey({ armoredKey: publicArmoredKey.trim() })
   if (publicKey.isPrivate()) throw new Error('Inserisci una chiave pubblica nel campo pubblico.')
   await assertUsableKey(publicKey)
@@ -101,14 +100,14 @@ export async function signAuthentication(
 }
 
 export async function encryptMessage(
-  payload: MessagePayload,
+  content: MessageContent,
   ownPublicKey: PublicKey,
   privateKey: PrivateKey,
   contactPublicKey: string,
 ) {
   const recipientKey = await readKey({ armoredKey: contactPublicKey })
   return encrypt({
-    message: await createMessage({ text: JSON.stringify(payload) }),
+    message: await createMessage({ text: JSON.stringify(content) }),
     encryptionKeys: [recipientKey, ownPublicKey],
     signingKeys: privateKey,
     format: 'armored',
@@ -119,19 +118,35 @@ export async function decryptMessage(
   ciphertext: string,
   privateKey: PrivateKey,
   verificationKeys: string[],
-): Promise<MessagePayload> {
+): Promise<MessageContent> {
+  const publicKeys = await Promise.all(
+    verificationKeys.map((armoredKey) => readKey({ armoredKey })),
+  )
   const result = await decrypt({
     message: await readMessage({ armoredMessage: ciphertext }),
     decryptionKeys: privateKey,
-    verificationKeys: await Promise.all(verificationKeys.map((armoredKey) => readKey({ armoredKey }))),
+    verificationKeys: publicKeys,
     expectSigned: true,
     format: 'utf8',
   })
   if (!result.signatures.length) throw new Error('Il messaggio non è firmato.')
   await Promise.all(result.signatures.map(({ verified }) => verified))
-  const payload: unknown = JSON.parse(result.data)
-  if (!payload || typeof payload !== 'object') throw new Error('Payload del messaggio non valido.')
-  return payload as MessagePayload
+  const content: unknown = JSON.parse(result.data)
+  if (!content || typeof content !== 'object') throw new Error('Contenuto del messaggio non valido.')
+  const claimedFingerprint = Reflect.get(content, 'from_fingerprint')
+  const signerMatchesClaim = typeof claimedFingerprint === 'string' && result.signatures.some(
+    ({ keyID }) => publicKeys.some((key) =>
+      key.getFingerprint() === claimedFingerprint && key.getKeys(keyID).length > 0,
+    ),
+  )
+  if (!signerMatchesClaim) throw new Error('La firma non corrisponde al fingerprint dichiarato.')
+  return content as MessageContent
+}
+
+function stringifyLocalData(value: unknown) {
+  return JSON.stringify(value, (key, item) =>
+    ['privateKey', 'passphrase', 'plaintext', 'text'].includes(key) ? undefined : item,
+  )
 }
 
 export function loadStoredIdentity(): StoredIdentity | undefined {
@@ -153,8 +168,8 @@ export function loadContacts(fingerprint: string): Contact[] {
 }
 
 export function saveLocalData(identity: StoredIdentity, contacts: Contact[]) {
-  localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity))
-  localStorage.setItem(`${DATA_PREFIX}${identity.fingerprint}`, JSON.stringify({ contacts }))
+  localStorage.setItem(IDENTITY_KEY, stringifyLocalData(identity))
+  localStorage.setItem(`${DATA_PREFIX}${identity.fingerprint}`, stringifyLocalData({ contacts }))
 }
 
 export function clearLocalData(fingerprint?: string) {
@@ -163,5 +178,5 @@ export function clearLocalData(fingerprint?: string) {
 }
 
 export function serializeLocalData(identity: StoredIdentity, contacts: Contact[]) {
-  return JSON.stringify({ identity, contacts })
+  return stringifyLocalData({ identity, contacts })
 }

@@ -5,13 +5,13 @@ import {
   activateRelation,
   changeContactKey,
   createContact,
-  createMessagePayload,
+  createMessageContent,
   MAX_MESSAGE_LENGTH,
   normalizeNickname,
   validateNickname,
   type Contact,
   type ContactKey,
-  type MessagePayload,
+  type MessageContent,
 } from './domain'
 import {
   clearLocalData,
@@ -32,7 +32,7 @@ type KeyDialog = { mode: 'add' } | { mode: 'update'; contactId: string }
 type PendingSend = {
   requestId: string
   contactId: string
-  payload: MessagePayload
+  content: MessageContent
   ciphertext: string
   text: string
 }
@@ -75,6 +75,7 @@ function App() {
   const [storageError, setStorageError] = useState('')
   const socketRef = useRef<WebSocket | undefined>(undefined)
   const pendingSendRef = useRef<PendingSend | undefined>(undefined)
+  const receiveQueueRef = useRef(Promise.resolve())
 
   function replaceContacts(next: Contact[]) {
     contactsRef.current = next
@@ -118,18 +119,18 @@ function App() {
           const verificationKeys = entry.direction === 'outgoing'
             ? [currentSession.publicArmoredKey]
             : contact.keys.map((key) => key.publicKey)
-          const payload = await decryptMessage(entry.ciphertext, currentSession.privateKey, verificationKeys)
+          const content = await decryptMessage(entry.ciphertext, currentSession.privateKey, verificationKeys)
           const contactFingerprint = entry.direction === 'outgoing'
-            ? payload.to_fingerprint
-            : payload.from_fingerprint
+            ? content.to_fingerprint
+            : content.from_fingerprint
           const ownFingerprint = entry.direction === 'outgoing'
-            ? payload.from_fingerprint
-            : payload.to_fingerprint
+            ? content.from_fingerprint
+            : content.to_fingerprint
           if (
-            payload.message_id === entry.messageId &&
+            content.message_id === entry.messageId &&
             ownFingerprint === currentSession.fingerprint &&
             contact.keys.some(({ fingerprint }) => fingerprint === contactFingerprint)
-          ) restored[entry.messageId] = payload.text
+          ) restored[entry.messageId] = content.text
         } catch {
           // Invalid stored entries stay encrypted and are never rendered.
         }
@@ -205,18 +206,21 @@ function App() {
         nextSequence: item.nextSequence + 1,
         conversation: [...item.conversation, {
           kind: 'message', direction: 'outgoing',
-          messageId: pending.payload.message_id,
+          messageId: pending.content.message_id,
           ciphertext: pending.ciphertext,
-          createdAt: pending.payload.created_at,
+          createdAt: pending.content.created_at,
         }],
       }))
-      setPlaintexts((current) => ({ ...current, [pending.payload.message_id]: pending.text }))
+      setPlaintexts((current) => ({ ...current, [pending.content.message_id]: pending.text }))
       setComposer((current) => current === pending.text ? '' : current)
     } else if (
       type === 'message.received' && contact &&
       typeof event.ciphertext === 'string' && typeof event.message_id === 'string'
     ) {
-      void receiveMessage(contact, event.ciphertext, event.message_id, currentSession)
+      // ponytail: one queue preserves replay ordering; use per-contact queues if throughput matters.
+      receiveQueueRef.current = receiveQueueRef.current.then(() =>
+        receiveMessage(contact.id, event.ciphertext as string, event.message_id as string, currentSession),
+      )
     } else if (type === 'error') {
       const code = String(event.code ?? '')
       setError(errorLabels[code] ?? 'Il server ha rifiutato la richiesta.')
@@ -225,30 +229,34 @@ function App() {
   }
 
   async function receiveMessage(
-    contact: Contact,
+    contactId: string,
     ciphertext: string,
     externalMessageId: string,
     currentSession: Session,
   ) {
     try {
-      const payload = await decryptMessage(
+      const knownContact = contactsRef.current.find(({ id }) => id === contactId)
+      if (!knownContact) return
+      const content = await decryptMessage(
         ciphertext,
         currentSession.privateKey,
-        contact.keys.map((key) => key.publicKey),
+        knownContact.keys.map((key) => key.publicKey),
       )
       if (sessionRef.current !== currentSession) return
-      if (payload.message_id !== externalMessageId) throw new Error('ID del messaggio non coerente.')
-      const accepted = acceptIncomingMessage(contact, currentSession.fingerprint, payload)
+      const contact = contactsRef.current.find(({ id }) => id === contactId)
+      if (!contact) return
+      if (content.message_id !== externalMessageId) throw new Error('ID del messaggio non coerente.')
+      const accepted = acceptIncomingMessage(contact, currentSession.fingerprint, content)
       const next = {
         ...accepted,
         unread: activeContactIdRef.current === contact.id ? 0 : accepted.unread + 1,
         conversation: [...accepted.conversation, {
           kind: 'message' as const, direction: 'incoming' as const,
-          messageId: payload.message_id, ciphertext, createdAt: payload.created_at,
+          messageId: content.message_id, ciphertext, createdAt: content.created_at,
         }],
       }
       updateContact(contact.id, () => next)
-      setPlaintexts((current) => ({ ...current, [payload.message_id]: payload.text }))
+      setPlaintexts((current) => ({ ...current, [content.message_id]: content.text }))
     } catch {
       setError('Messaggio ricevuto scartato: verifica non riuscita.')
     }
@@ -352,6 +360,12 @@ function App() {
       if (keyDialog?.mode === 'update') {
         const existing = contactsRef.current.find(({ id }) => id === keyDialog.contactId)
         if (!existing) throw new Error('Contatto non trovato.')
+        if (connection !== 'online') throw new Error('Riconnettiti prima di aggiornare la chiave.')
+        if (!existing.blocked) {
+          send(existing.status === 'pending' ? 'contact.cancel' : 'contact.block', {
+            target_fingerprint: existing.currentFingerprint,
+          })
+        }
         changed = changeContactKey(existing, contactPreview)
         replaceContacts(contactsRef.current.map((item) => item.id === existing.id ? changed : item))
       } else {
@@ -362,7 +376,7 @@ function App() {
         if (!existing) replaceContacts([...contactsRef.current, changed])
       }
       setKeyDialog(undefined)
-      addIntent(changed)
+      if (!changed.blocked) addIntent(changed)
       selectContact(changed.id)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Impossibile importare la chiave.')
@@ -381,21 +395,21 @@ function App() {
     if (!currentSession || !contact || pendingSendRef.current || storageError) return
     setError('')
     try {
-      const payload = createMessagePayload(composer, currentSession.fingerprint, contact)
+      const content = createMessageContent(composer, currentSession.fingerprint, contact)
       const currentKey = contact.keys.find(({ fingerprint }) =>
         fingerprint === contact.currentFingerprint,
       )
       if (!currentKey) throw new Error('Chiave corrente del contatto non trovata.')
       const ciphertext = await encryptMessage(
-        payload, currentSession.publicKey, currentSession.privateKey, currentKey.publicKey,
+        content, currentSession.publicKey, currentSession.privateKey, currentKey.publicKey,
       )
       const requestId = send('message.send', {
         to_fingerprint: contact.currentFingerprint,
-        message_id: payload.message_id,
+        message_id: content.message_id,
         ciphertext,
       })
       pendingSendRef.current = {
-        requestId, contactId: contact.id, payload, ciphertext, text: composer,
+        requestId, contactId: contact.id, content, ciphertext, text: composer,
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Invio non riuscito.')
