@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tacitus-backend
+  namespace: tacitus
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: tacitus-backend
+  template:
+    metadata:
+      labels:
+        app: tacitus-backend
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: backend
+          image: ghcr.io/ethos-adamas/tacitus-be:replace-me
+          env:
+            - name: PUBLIC_ORIGIN
+              value: https://tacitus.ethos-adamas.it
+          ports:
+            - name: http
+              containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tacitus-backend
+  namespace: tacitus
+spec:
+  selector:
+    app: tacitus-backend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

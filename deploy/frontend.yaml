@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tacitus-frontend
+  namespace: tacitus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tacitus-frontend
+  template:
+    metadata:
+      labels:
+        app: tacitus-frontend
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: frontend
+          image: ghcr.io/ethos-adamas/tacitus-fe:replace-me
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tacitus-frontend
+  namespace: tacitus
+spec:
+  selector:
+    app: tacitus-frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
