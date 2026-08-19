@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import {
   abbreviateFingerprint,
   acceptIncomingMessage,
@@ -68,6 +68,7 @@ function App() {
   const [plaintexts, setPlaintexts] = useState<Record<string, string>>({})
   const [composer, setComposer] = useState('')
   const [keyDialog, setKeyDialog] = useState<KeyDialog>()
+  const keyDialogRef = useRef<HTMLDialogElement>(null)
   const [contactKey, setContactKey] = useState('')
   const [contactPreview, setContactPreview] = useState<ContactKey>()
   const [contactConfirmed, setContactConfirmed] = useState(false)
@@ -76,6 +77,10 @@ function App() {
   const socketRef = useRef<WebSocket | undefined>(undefined)
   const pendingSendRef = useRef<PendingSend | undefined>(undefined)
   const receiveQueueRef = useRef(Promise.resolve())
+
+  useEffect(() => {
+    if (keyDialog && !keyDialogRef.current?.open) keyDialogRef.current?.showModal()
+  }, [keyDialog])
 
   function replaceContacts(next: Contact[]) {
     contactsRef.current = next
@@ -584,7 +589,7 @@ function App() {
         </section>
       </section>
 
-      {keyDialog && <dialog open aria-labelledby="key-dialog-title">
+      {keyDialog && <dialog ref={keyDialogRef} aria-labelledby="key-dialog-title" onClose={() => setKeyDialog(undefined)}>
         <form onSubmit={submitContact}>
           <div className="dialog-title"><div><p className="eyebrow">Chiave scambiata fuori dall’app</p><h2 id="key-dialog-title">{keyDialog.mode === 'add' ? 'Aggiungi contatto' : 'Aggiorna chiave'}</h2></div><button type="button" aria-label="Chiudi" onClick={() => setKeyDialog(undefined)}>×</button></div>
           <p>Il server riceverà soltanto il fingerprint, mai questa chiave.</p>
