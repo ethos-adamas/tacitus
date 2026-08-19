@@ -6,3 +6,4 @@ resources:
   - frontend.yaml
   - backend.yaml
   - ingress.yaml
+  - redirect.yaml
