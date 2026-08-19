@@ -1,3 +1,4 @@
+# Build from the workspace directory: docker build -f secret-chat-be/Dockerfile .
 FROM node:24-alpine AS frontend
 WORKDIR /app/secret-chat-fe
 COPY secret-chat-fe/package*.json ./
@@ -18,4 +19,5 @@ COPY --from=backend /app/secret-chat-be/target/release/secret-chat-be /usr/local
 COPY --from=frontend /app/secret-chat-fe/dist /app/dist
 ENV STATIC_DIR=/app/dist
 EXPOSE 3000
+USER 65532:65532
 CMD ["secret-chat"]

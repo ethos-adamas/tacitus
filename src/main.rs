@@ -15,7 +15,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::json;
 use state::{
-    AppState, Delivery, RateKind, ServerCommand, ServerFrame, StateError, Transition, random_token,
+    AppState, Delivery, RateKind, ServerFrame, SessionChannel, StateError, Transition, random_token,
 };
 use std::{
     env,
@@ -25,7 +25,7 @@ use std::{
 };
 use tokio::{
     net::TcpListener,
-    sync::{RwLock, mpsc},
+    sync::{RwLock, Semaphore, mpsc},
     time::{interval, timeout},
 };
 use tower_http::{
@@ -36,6 +36,8 @@ use tower_http::{
 type SharedState = Arc<RwLock<AppState>>;
 
 const MAX_FRAME_BYTES: usize = 64 * 1024;
+const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
+static AUTH_SLOTS: Semaphore = Semaphore::const_new(4);
 
 #[derive(Deserialize)]
 #[serde(tag = "type", deny_unknown_fields)]
@@ -192,24 +194,29 @@ async fn serve_socket(mut socket: WebSocket, state: SharedState) {
         let _ = send_error(&mut socket, None, "authentication_failed").await;
         return;
     };
-    let Ok(identity) = parse_public_identity(&public_key) else {
+    let Ok(permit) = AUTH_SLOTS.acquire().await else {
+        return;
+    };
+    let authenticated = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        let identity = parse_public_identity(&public_key).map_err(|_| ())?;
+        challenge
+            .verify(Instant::now(), &nickname, &signature, &identity.cert)
+            .map_err(|_| ())?;
+        Ok::<_, ()>((nickname, public_key, identity.fingerprint))
+    })
+    .await;
+    let Ok(Ok((nickname, public_key, fingerprint))) = authenticated else {
         let _ = send_error(&mut socket, None, "authentication_failed").await;
         return;
     };
-    if challenge
-        .verify(Instant::now(), &nickname, &signature, &identity.cert)
-        .is_err()
-    {
-        let _ = send_error(&mut socket, None, "authentication_failed").await;
-        return;
-    }
 
     let session_id = random_token::<16>();
-    let (sender, mut receiver) = mpsc::channel(64);
+    let (sender, mut receiver, mut close_receiver) = SessionChannel::new(session_id.clone());
     let registration = {
         state.write().await.register(
             &nickname,
-            &identity.fingerprint,
+            &fingerprint,
             public_key,
             session_id.clone(),
             sender,
@@ -222,19 +229,26 @@ async fn serve_socket(mut socket: WebSocket, state: SharedState) {
             return;
         }
     };
-    if let Some(replaced) = registration.replaced {
-        let _ = replaced.try_send(ServerCommand::Close);
-    }
-    dispatch(Transition {
-        deliveries: registration.deliveries,
-        log: None,
-    });
     if send_frame(
         &mut socket,
         &ServerFrame::AuthReady {
             v: 1,
             nickname: registration.nickname,
-            fingerprint: identity.fingerprint,
+            fingerprint,
+        },
+    )
+    .await
+    .is_err()
+    {
+        cleanup(&state, &session_id).await;
+        return;
+    }
+    if dispatch_for(
+        &mut socket,
+        &session_id,
+        Transition {
+            deliveries: registration.deliveries,
+            log: None,
         },
     )
     .await
@@ -250,14 +264,18 @@ async fn serve_socket(mut socket: WebSocket, state: SharedState) {
     let mut invalid_frames = 0_u8;
     loop {
         tokio::select! {
-            command = receiver.recv() => match command {
-                Some(ServerCommand::Frame(frame)) => {
+            frame = receiver.recv() => match frame {
+                Some(frame) => {
                     if send_frame(&mut socket, &frame).await.is_err() { break; }
                 }
-                Some(ServerCommand::Close) | None => {
-                    let _ = socket.send(Message::Close(None)).await;
+                None => {
+                    let _ = send_socket_message(&mut socket, Message::Close(None)).await;
                     break;
                 }
+            },
+            _ = close_receiver.changed() => {
+                let _ = send_socket_message(&mut socket, Message::Close(None)).await;
+                break;
             },
             incoming = socket.recv() => match incoming {
                 Some(Ok(Message::Text(text))) => {
@@ -276,7 +294,7 @@ async fn serve_socket(mut socket: WebSocket, state: SharedState) {
                 }
                 Some(Ok(Message::Pong(_))) => last_pong = Instant::now(),
                 Some(Ok(Message::Ping(bytes))) => {
-                    if socket.send(Message::Pong(bytes)).await.is_err() { break; }
+                    if send_socket_message(&mut socket, Message::Pong(bytes)).await.is_err() { break; }
                 }
                 Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
                 Some(Ok(Message::Binary(_))) => {
@@ -287,7 +305,7 @@ async fn serve_socket(mut socket: WebSocket, state: SharedState) {
             },
             _ = heartbeat.tick() => {
                 if last_pong.elapsed() >= Duration::from_secs(60)
-                    || socket.send(Message::Ping(Vec::new().into())).await.is_err()
+                    || send_socket_message(&mut socket, Message::Ping(Vec::new().into())).await.is_err()
                 {
                     break;
                 }
@@ -400,7 +418,7 @@ async fn process_frame(
                     })
             };
             match result {
-                Ok(route) => match route.sender.try_send(ServerCommand::Frame(route.frame)) {
+                Ok(route) => match route.sender.try_send(route.frame) {
                     Ok(()) => {
                         let _ = send_frame(
                             socket,
@@ -452,7 +470,11 @@ async fn contact_action(
             .and_then(|()| action(&mut state))
     };
     match result {
-        Ok(transition) => dispatch(transition),
+        Ok(transition) => {
+            if dispatch_for(socket, session_id, transition).await.is_err() {
+                return true;
+            }
+        }
         Err(error) => {
             let close = matches!(error, StateError::RateLimited { close: true });
             let _ = send_error(socket, Some(request_id), error.code()).await;
@@ -464,10 +486,38 @@ async fn contact_action(
 
 fn dispatch(transition: Transition) {
     for Delivery { sender, frame } in transition.deliveries {
-        let _ = sender.try_send(ServerCommand::Frame(frame));
+        deliver(sender, frame);
     }
     if let Some(line) = transition.log {
         println!("{line}");
+    }
+}
+
+async fn dispatch_for(
+    socket: &mut WebSocket,
+    session_id: &str,
+    transition: Transition,
+) -> Result<(), ()> {
+    let mut socket_failed = false;
+    for Delivery { sender, frame } in transition.deliveries {
+        if sender.id() == session_id {
+            socket_failed |= send_frame(socket, &frame).await.is_err();
+        } else {
+            deliver(sender, frame);
+        }
+    }
+    if let Some(line) = transition.log {
+        println!("{line}");
+    }
+    if socket_failed { Err(()) } else { Ok(()) }
+}
+
+fn deliver(sender: SessionChannel, frame: ServerFrame) {
+    if matches!(
+        sender.try_send(frame),
+        Err(mpsc::error::TrySendError::Full(_))
+    ) {
+        sender.close();
     }
 }
 
@@ -481,9 +531,13 @@ async fn cleanup(state: &SharedState, session_id: &str) {
 
 async fn send_frame(socket: &mut WebSocket, frame: &ServerFrame) -> Result<(), ()> {
     let text = serde_json::to_string(frame).map_err(|_| ())?;
-    socket
-        .send(Message::Text(text.into()))
+    send_socket_message(socket, Message::Text(text.into())).await
+}
+
+async fn send_socket_message(socket: &mut WebSocket, message: Message) -> Result<(), ()> {
+    timeout(WRITE_TIMEOUT, socket.send(message))
         .await
+        .map_err(|_| ())?
         .map_err(|_| ())
 }
 
@@ -539,5 +593,28 @@ mod tests {
     #[tokio::test]
     async fn health_has_expected_body() {
         assert_eq!(health().await.0, json!({ "status": "ok" }));
+    }
+
+    #[test]
+    fn full_control_queue_closes_the_session_for_resync() {
+        let (sender, _receiver, close) = SessionChannel::new("session".into());
+        for _ in 0..64 {
+            sender
+                .try_send(ServerFrame::PresenceChanged {
+                    v: 1,
+                    fingerprint: "fingerprint".into(),
+                    online: true,
+                })
+                .unwrap();
+        }
+        deliver(
+            sender,
+            ServerFrame::PresenceChanged {
+                v: 1,
+                fingerprint: "fingerprint".into(),
+                online: false,
+            },
+        );
+        assert!(*close.borrow());
     }
 }

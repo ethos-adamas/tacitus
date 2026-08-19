@@ -4,14 +4,36 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
     time::{Duration, Instant},
 };
-use tokio::sync::mpsc;
-
-pub type SessionSender = mpsc::Sender<ServerCommand>;
+use tokio::sync::{mpsc, watch};
 
 #[derive(Clone, Debug)]
-pub enum ServerCommand {
-    Frame(ServerFrame),
-    Close,
+pub struct SessionChannel {
+    id: String,
+    frames: mpsc::Sender<ServerFrame>,
+    close: watch::Sender<bool>,
+}
+
+impl SessionChannel {
+    pub fn new(id: String) -> (Self, mpsc::Receiver<ServerFrame>, watch::Receiver<bool>) {
+        let (frames, receiver) = mpsc::channel(64);
+        let (close, close_receiver) = watch::channel(false);
+        (Self { id, frames, close }, receiver, close_receiver)
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub fn try_send(
+        &self,
+        frame: ServerFrame,
+    ) -> Result<(), mpsc::error::TrySendError<ServerFrame>> {
+        self.frames.try_send(frame)
+    }
+
+    pub fn close(&self) {
+        self.close.send_replace(true);
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -79,11 +101,11 @@ pub enum ServerFrame {
 
 #[derive(Clone, Debug)]
 pub struct Delivery {
-    pub sender: SessionSender,
+    pub sender: SessionChannel,
     pub frame: ServerFrame,
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Transition {
     pub deliveries: Vec<Delivery>,
     pub log: Option<String>,
@@ -92,13 +114,12 @@ pub struct Transition {
 #[derive(Debug)]
 pub struct Registration {
     pub nickname: String,
-    pub replaced: Option<SessionSender>,
     pub deliveries: Vec<Delivery>,
 }
 
 #[derive(Debug)]
 pub struct MessageRoute {
-    pub sender: SessionSender,
+    pub sender: SessionChannel,
     pub frame: ServerFrame,
 }
 
@@ -150,7 +171,7 @@ struct Identity {
 #[derive(Clone)]
 struct Session {
     id: String,
-    sender: SessionSender,
+    sender: SessionChannel,
 }
 
 #[derive(Clone, Eq, Hash, PartialEq)]
@@ -209,7 +230,7 @@ impl AppState {
         fingerprint: &str,
         public_key: String,
         session_id: String,
-        sender: SessionSender,
+        sender: SessionChannel,
     ) -> Result<Registration, StateError> {
         let nickname = normalize_nickname(nickname)?;
         let fingerprint = fingerprint.to_ascii_lowercase();
@@ -264,16 +285,30 @@ impl AppState {
 
         let mut deliveries = Vec::new();
         for (pair, relation) in &self.relations {
-            if relation.active()
-                && let Some(other) = pair.other(&fingerprint)
-                && let Some(epoch) = &relation.epoch
-            {
-                deliveries.extend(self.matched_deliveries(&fingerprint, other, epoch));
+            if let Some(other) = pair.other(&fingerprint) {
+                if relation.active()
+                    && let Some(epoch) = &relation.epoch
+                {
+                    deliveries.extend(self.matched_deliveries(&fingerprint, other, epoch));
+                } else {
+                    deliveries.push(Delivery {
+                        sender: sender.clone(),
+                        frame: ServerFrame::ContactState {
+                            v: 1,
+                            fingerprint: other.to_owned(),
+                            active: false,
+                            nickname: None,
+                            relationship_epoch: None,
+                        },
+                    });
+                }
             }
+        }
+        if let Some(replaced) = replaced {
+            replaced.close();
         }
         Ok(Registration {
             nickname,
-            replaced,
             deliveries,
         })
     }
@@ -323,6 +358,13 @@ impl AppState {
         if from == target {
             return Err(StateError::InvalidRequest);
         }
+        if self
+            .relations
+            .get(&Pair::new(&from, &target))
+            .is_some_and(Relation::active)
+        {
+            return Err(StateError::ContactUnavailable);
+        }
         let intent = Intent {
             session_id: session_id.to_owned(),
             from: from.clone(),
@@ -336,7 +378,7 @@ impl AppState {
                 .count()
                 >= 20
         {
-            return Err(StateError::RateLimited { close: false });
+            return Err(self.rate_violation(session_id)?);
         }
         self.intents.insert(intent);
         let mut transition = Transition {
@@ -395,9 +437,13 @@ impl AppState {
     ) -> Result<Transition, StateError> {
         let (from, sender) = self.session_identity(session_id)?;
         let target = target_fingerprint.to_ascii_lowercase();
+        let before = self.intents.len();
         self.intents.retain(|intent| {
             !(intent.session_id == session_id && intent.from == from && intent.to == target)
         });
+        if self.intents.len() == before {
+            return Err(StateError::ContactUnavailable);
+        }
         Ok(Transition {
             deliveries: vec![Delivery {
                 sender,
@@ -443,8 +489,13 @@ impl AppState {
     ) -> Result<Transition, StateError> {
         let (from, _) = self.session_identity(session_id)?;
         let target = target_fingerprint.to_ascii_lowercase();
-        let relation = self.relations.entry(Pair::new(&from, &target)).or_default();
-        relation.grants.insert(from.clone());
+        let relation = self
+            .relations
+            .get_mut(&Pair::new(&from, &target))
+            .ok_or(StateError::ContactUnavailable)?;
+        if !relation.grants.insert(from.clone()) {
+            return Err(StateError::ContactUnavailable);
+        }
         if !relation.grants.contains(&target) {
             return Ok(Transition {
                 deliveries: self.inactive_deliveries(&from, &target),
@@ -527,7 +578,7 @@ impl AppState {
         Ok(())
     }
 
-    fn session_identity(&self, session_id: &str) -> Result<(String, SessionSender), StateError> {
+    fn session_identity(&self, session_id: &str) -> Result<(String, SessionChannel), StateError> {
         let fingerprint = self
             .fingerprint_by_session
             .get(session_id)
@@ -546,7 +597,7 @@ impl AppState {
             .and_then(|identity| identity.session.clone())
     }
 
-    fn online_sender(&self, fingerprint: &str) -> Option<SessionSender> {
+    fn online_sender(&self, fingerprint: &str) -> Option<SessionChannel> {
         self.online_session(fingerprint)
             .map(|session| session.sender)
     }
@@ -615,6 +666,17 @@ impl AppState {
             self.nickname(target).unwrap_or_default()
         )
     }
+
+    fn rate_violation(&mut self, session_id: &str) -> Result<StateError, StateError> {
+        let limits = self
+            .limits
+            .get_mut(session_id)
+            .ok_or(StateError::AuthenticationFailed)?;
+        limits.violations = limits.violations.saturating_add(1);
+        Ok(StateError::RateLimited {
+            close: limits.violations >= 3,
+        })
+    }
 }
 
 fn normalize_nickname(nickname: &str) -> Result<String, StateError> {
@@ -638,8 +700,8 @@ pub fn random_token<const N: usize>() -> String {
 mod tests {
     use super::*;
 
-    fn sender() -> SessionSender {
-        mpsc::channel(32).0
+    fn sender(session: &str) -> SessionChannel {
+        SessionChannel::new(session.into()).0
     }
 
     fn register(
@@ -654,7 +716,7 @@ mod tests {
                 fingerprint,
                 format!("PUBLIC {nickname}"),
                 session.into(),
-                sender(),
+                sender(session),
             )
             .unwrap()
     }
@@ -689,7 +751,7 @@ mod tests {
                     "fingerprint-b",
                     "PUBLIC".into(),
                     "session-b".into(),
-                    sender()
+                    sender("session-b")
                 )
                 .unwrap_err(),
             StateError::NicknameUnavailable,
@@ -701,7 +763,7 @@ mod tests {
                     "fingerprint-c",
                     "PUBLIC".into(),
                     "session-c".into(),
-                    sender()
+                    sender("session-c")
                 )
                 .unwrap_err(),
             StateError::InvalidRequest,
@@ -711,12 +773,12 @@ mod tests {
     #[test]
     fn replacement_session_survives_old_cleanup() {
         let mut state = AppState::default();
-        register(&mut state, "alice", "alice-fp", "old");
-        assert!(
-            register(&mut state, "alice", "alice-fp", "new")
-                .replaced
-                .is_some()
-        );
+        let (old, _frames, close) = SessionChannel::new("old".into());
+        state
+            .register("alice", "alice-fp", "PUBLIC".into(), "old".into(), old)
+            .unwrap();
+        register(&mut state, "alice", "alice-fp", "new");
+        assert!(*close.borrow());
         assert!(state.disconnect("old").is_empty());
         assert_eq!(state.fingerprint_by_session.get("new").unwrap(), "alice-fp");
     }
@@ -730,6 +792,7 @@ mod tests {
             .add_contact("alice-session", "bob-fp", "a".into())
             .unwrap();
         assert_eq!(first.deliveries.len(), 1);
+        assert_eq!(first.deliveries[0].sender.id(), "alice-session");
         assert!(matches!(
             first.deliveries[0].frame,
             ServerFrame::ContactPending { .. }
@@ -798,6 +861,46 @@ mod tests {
             })
             .unwrap();
         assert_ne!(first_epoch, second_epoch);
+        assert_eq!(
+            state
+                .unblock_contact("alice-session", "bob-fp")
+                .unwrap_err(),
+            StateError::ContactUnavailable,
+        );
+        assert_eq!(
+            state
+                .add_contact("alice-session", "bob-fp", "again".into())
+                .unwrap_err(),
+            StateError::ContactUnavailable,
+        );
+        assert_eq!(
+            state.cancel_contact("alice-session", "bob-fp").unwrap_err(),
+            StateError::ContactUnavailable,
+        );
+
+        state.block_contact("alice-session", "bob-fp").unwrap();
+        state.disconnect("alice-session");
+        let registration = register(&mut state, "alice", "alice-fp", "alice-new");
+        assert!(registration.deliveries.iter().any(|delivery| matches!(
+            delivery.frame,
+            ServerFrame::ContactState {
+                active: false,
+                ref fingerprint,
+                ..
+            } if fingerprint == "bob-fp"
+        )));
+    }
+
+    #[test]
+    fn unblock_cannot_create_a_relation() {
+        let mut state = AppState::default();
+        register(&mut state, "alice", "alice-fp", "alice-session");
+        assert_eq!(
+            state
+                .unblock_contact("alice-session", "bob-fp")
+                .unwrap_err(),
+            StateError::ContactUnavailable,
+        );
     }
 
     #[test]
@@ -856,6 +959,38 @@ mod tests {
             assert_eq!(
                 state.check_rate("alice-session", RateKind::Message, now),
                 Err(StateError::RateLimited { close }),
+            );
+        }
+
+        let mut contact_rate = AppState::default();
+        register(&mut contact_rate, "alice", "alice-fp", "alice-session");
+        for _ in 0..10 {
+            contact_rate
+                .check_rate("alice-session", RateKind::Contact, now)
+                .unwrap();
+        }
+        assert_eq!(
+            contact_rate.check_rate("alice-session", RateKind::Contact, now),
+            Err(StateError::RateLimited { close: false }),
+        );
+
+        let mut contacts = AppState::default();
+        register(&mut contacts, "alice", "alice-fp", "alice-session");
+        for index in 0..20 {
+            contacts
+                .add_contact(
+                    "alice-session",
+                    &format!("target-{index}"),
+                    index.to_string(),
+                )
+                .unwrap();
+        }
+        for close in [false, false, true] {
+            assert_eq!(
+                contacts
+                    .add_contact("alice-session", "target-overflow", "overflow".into())
+                    .unwrap_err(),
+                StateError::RateLimited { close },
             );
         }
     }
