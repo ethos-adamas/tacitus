@@ -5,8 +5,12 @@ Tacitus consente a due persone contemporaneamente online di stabilire un contatt
 ## Language
 
 **Identità**:
-Il nickname e il fingerprint OpenPGP registrati insieme per la vita del processo backend.
+Il nickname immutabile, il Tacitus ID e il documento pubblico registrati insieme soltanto mentre l'Identità è online.
 _Avoid_: Account, profilo
+
+**Tacitus ID**:
+L'identificatore pubblico corto derivato dalle chiavi dell'Identità, usato dal backend esclusivamente come locator temporaneo. Non è una credenziale di autorizzazione.
+_Avoid_: Fingerprint, username, account ID
 
 **Sessione**:
 La connessione autenticata corrente di un’Identità; una nuova Sessione sostituisce la precedente.
@@ -17,9 +21,9 @@ La volontà unilaterale e temporanea di stabilire una Relazione con un Contatto.
 _Avoid_: Richiesta di amicizia, invito
 
 **Relazione**:
-Il consenso reciproco tra due Identità, valido per una specifica coppia di fingerprint e per un epoch.
+Il consenso reciproco tra due Identità, valido per una specifica coppia di Tacitus ID e per un epoch.
 _Avoid_: Amicizia, connessione
 
 **Messaggio cifrato**:
-Il testo OpenPGP opaco che il backend instrada senza decifrarlo.
+Il ciphertext end-to-end opaco che il backend instrada senza decifrarlo.
 _Avoid_: Messaggio in chiaro, contenuto

@@ -5,11 +5,15 @@ Tacitus consente a due persone contemporaneamente online di stabilire un contatt
 ## Language
 
 **Identità locale**:
-La singola identità OpenPGP usata nel browser, riconosciuta pubblicamente da nickname e fingerprint.
+L'identità crittografica generata per una singola installazione, riconosciuta pubblicamente dalla coppia composta da nickname immutabile e Tacitus ID.
 _Avoid_: Account, profilo, utente locale
 
+**Tacitus ID**:
+L'identificatore pubblico corto derivato dall'Identità locale, usato per stabilire un contatto mentre entrambe le Identità sono online. Non è una credenziale di autorizzazione.
+_Avoid_: Fingerprint, username, account ID
+
 **Contatto**:
-Una persona la cui chiave pubblica è stata importata privatamente e vincolata al relativo fingerprint.
+Una persona la cui Identità locale è stata accettata attraverso Intenti di contatto reciproci e vincolata al relativo Tacitus ID.
 _Avoid_: Amico, account, destinatario
 
 **Intento di contatto**:
@@ -17,21 +21,21 @@ La volontà unilaterale e temporanea di stabilire una relazione con un Contatto.
 _Avoid_: Richiesta di amicizia, invito
 
 **Relazione**:
-Il consenso reciproco tra due Identità, valido per una specifica coppia di fingerprint e per un epoch.
+Il consenso reciproco tra due Identità, valido per una specifica coppia di Tacitus ID e per un epoch.
 _Avoid_: Amicizia, connessione
 
 **Conversazione**:
-La cronologia locale associata a un Contatto, mantenuta anche quando cambia il suo fingerprint.
+La cronologia locale cifrata associata a un Contatto, mantenuta tra connessioni e cancellata definitivamente insieme al Contatto o all'Identità locale.
 _Avoid_: Relazione, stanza, canale
 
 **Messaggio cifrato**:
-Un testo firmato e cifrato per entrambe le Identità di una Relazione.
+Un testo cifrato end-to-end per le Identità di una Relazione.
 _Avoid_: Payload, messaggio in chiaro
 
 **Contenuto del messaggio**:
-Il testo e i dati di relazione autenticati dalla firma prima della cifratura.
+Il testo e i dati di Relazione autenticati dalla cifratura end-to-end.
 _Avoid_: Payload
 
 **Evento locale**:
-Una voce della Conversazione generata dal browser, non inviata e non cifrata, che registra un cambiamento rilevante come un nuovo fingerprint.
+Una voce della Conversazione generata dal client, non inviata, che registra un cambiamento rilevante della Relazione.
 _Avoid_: Messaggio di sistema
