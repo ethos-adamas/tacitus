@@ -1,0 +1,34 @@
+name: Deploy existing image
+
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: Component to deploy or roll back
+        required: true
+        type: choice
+        options:
+          - frontend
+          - backend
+      image_tag:
+        description: Full commit SHA already published to GHCR
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - uses: actions/checkout@v6
+      - run: .github/scripts/deploy.sh "$COMPONENT" "$IMAGE_TAG"
+        env:
+          COMPONENT: ${{ inputs.component }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
