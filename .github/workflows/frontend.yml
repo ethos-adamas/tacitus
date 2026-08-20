@@ -37,15 +37,13 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
       - run: rustup target add wasm32-unknown-unknown aarch64-linux-android
       - run: cargo install wasm-pack --version 0.15.0 --locked
       - run: cargo test -p tacitus-protocol --locked
       - run: cargo fmt --manifest-path frontend/src-tauri/Cargo.toml --all --check
       - run: cargo fmt --manifest-path frontend/src-tauri/plugins/identity/Cargo.toml --all --check
       - run: cargo clippy --manifest-path frontend/src-tauri/Cargo.toml --target aarch64-linux-android --locked -- -D warnings
-      - run: npm ci --registry=https://registry.npmjs.org
+      - run: npm install --registry=https://registry.npmjs.org
         working-directory: frontend
       - run: npm run lint
         working-directory: frontend

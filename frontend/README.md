@@ -11,7 +11,7 @@ Il protocollo wire e crittografico completo è documentato nel [`README` princip
 ```bash
 rustup target add wasm32-unknown-unknown
 cargo install wasm-pack --version 0.15.0 --locked
-npm ci
+npm install
 npm run dev
 ```
 
