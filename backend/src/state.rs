@@ -1,21 +1,27 @@
-use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::Serialize;
-use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    time::{Duration, Instant},
-};
+use std::collections::{HashMap, HashSet};
+use tacitus_protocol::parse_tacitus_id;
 use tokio::sync::{mpsc, watch};
+
+const MAX_PENDING_CONTACTS: usize = 20;
+const MAX_RELAY_BODY_BYTES: usize = 48 * 1024;
 
 #[derive(Clone, Debug)]
 pub struct SessionChannel {
     id: String,
-    frames: mpsc::Sender<ServerFrame>,
+    frames: mpsc::UnboundedSender<ServerFrame>,
     close: watch::Sender<bool>,
 }
 
 impl SessionChannel {
-    pub fn new(id: String) -> (Self, mpsc::Receiver<ServerFrame>, watch::Receiver<bool>) {
-        let (frames, receiver) = mpsc::channel(64);
+    pub fn new(
+        id: String,
+    ) -> (
+        Self,
+        mpsc::UnboundedReceiver<ServerFrame>,
+        watch::Receiver<bool>,
+    ) {
+        let (frames, receiver) = mpsc::unbounded_channel();
         let (close, close_receiver) = watch::channel(false);
         (Self { id, frames, close }, receiver, close_receiver)
     }
@@ -24,14 +30,13 @@ impl SessionChannel {
         &self.id
     }
 
-    pub fn try_send(
-        &self,
-        frame: ServerFrame,
-    ) -> Result<(), mpsc::error::TrySendError<ServerFrame>> {
-        self.frames.try_send(frame)
+    pub fn send(&self, frame: ServerFrame) -> Result<(), StateError> {
+        self.frames
+            .send(frame)
+            .map_err(|_| StateError::ContactUnavailable)
     }
 
-    pub fn close(&self) {
+    fn close(&self) {
         self.close.send_replace(true);
     }
 }
@@ -45,50 +50,55 @@ pub enum ServerFrame {
     AuthReady {
         v: u8,
         nickname: String,
-        fingerprint: String,
+        tacitus_id: String,
     },
     #[serde(rename = "contact.pending")]
     ContactPending {
         v: u8,
-        request_id: String,
-        target_fingerprint: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        request_id: Option<String>,
+        tacitus_id: String,
     },
     #[serde(rename = "contact.matched")]
     ContactMatched {
         v: u8,
+        tacitus_id: String,
         nickname: String,
-        fingerprint: String,
-        relationship_epoch: String,
+        online: bool,
     },
     #[serde(rename = "contact.state")]
     ContactState {
         v: u8,
-        fingerprint: String,
+        tacitus_id: String,
         active: bool,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        nickname: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        relationship_epoch: Option<String>,
+    },
+    #[serde(rename = "contact.removed")]
+    ContactRemoved {
+        v: u8,
+        request_id: String,
+        tacitus_id: String,
     },
     #[serde(rename = "presence.changed")]
     PresenceChanged {
         v: u8,
-        fingerprint: String,
+        tacitus_id: String,
         online: bool,
     },
-    #[serde(rename = "message.sent")]
-    MessageSent {
+    #[serde(rename = "handshake.sent")]
+    HandshakeSent { v: u8, request_id: String },
+    #[serde(rename = "handshake.received")]
+    HandshakeReceived {
         v: u8,
-        request_id: String,
-        message_id: String,
+        from_id: String,
+        body: String,
     },
+    #[serde(rename = "message.sent")]
+    MessageSent { v: u8, request_id: String },
     #[serde(rename = "message.received")]
     MessageReceived {
         v: u8,
-        message_id: String,
-        nickname: String,
-        from_fingerprint: String,
-        ciphertext: String,
+        from_id: String,
+        body: String,
     },
     #[serde(rename = "error")]
     Error {
@@ -99,104 +109,88 @@ pub enum ServerFrame {
     },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PayloadKind {
+    Handshake,
+    Message,
+}
+
 #[derive(Clone, Debug)]
 pub struct Delivery {
-    pub sender: SessionChannel,
-    pub frame: ServerFrame,
+    recipient: SessionChannel,
+    frame: ServerFrame,
 }
 
-#[derive(Debug, Default)]
-pub struct Transition {
-    pub deliveries: Vec<Delivery>,
-    pub log: Option<String>,
-}
-
-#[derive(Debug)]
-pub struct Registration {
-    pub nickname: String,
-    pub deliveries: Vec<Delivery>,
-}
-
-#[derive(Debug)]
-pub struct MessageRoute {
-    pub sender: SessionChannel,
-    pub frame: ServerFrame,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum StateError {
-    InvalidRequest,
-    AuthenticationFailed,
-    NicknameUnavailable,
-    RateLimited { close: bool },
-    ContactUnavailable,
-    MessageTooLarge,
-}
-
-impl StateError {
-    pub fn code(&self) -> &'static str {
-        match self {
-            Self::InvalidRequest => "invalid_request",
-            Self::AuthenticationFailed => "authentication_failed",
-            Self::NicknameUnavailable => "nickname_unavailable",
-            Self::RateLimited { .. } => "rate_limited",
-            Self::ContactUnavailable => "contact_unavailable",
-            Self::MessageTooLarge => "message_too_large",
-        }
+impl Delivery {
+    fn new(recipient: SessionChannel, frame: ServerFrame) -> Self {
+        Self { recipient, frame }
+    }
+    pub fn send(self) -> Result<(), StateError> {
+        self.recipient.send(self.frame)
     }
 }
 
-pub enum RateKind {
-    Message,
-    Contact,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StateError {
+    InvalidRequest,
+    AuthenticationFailed,
+    IdentityCollision,
+    ContactUnavailable,
+    TooManyContacts,
+    PayloadTooLarge,
+}
+
+impl StateError {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::InvalidRequest => "invalid_request",
+            Self::AuthenticationFailed => "authentication_failed",
+            Self::IdentityCollision => "identity_collision",
+            Self::ContactUnavailable => "contact_unavailable",
+            Self::TooManyContacts => "too_many_contacts",
+            Self::PayloadTooLarge => "payload_too_large",
+        }
+    }
 }
 
 #[derive(Default)]
 pub struct AppState {
     identities: HashMap<String, Identity>,
-    nickname_by_fingerprint: HashMap<String, String>,
-    fingerprint_by_session: HashMap<String, String>,
+    identity_by_session: HashMap<String, String>,
     intents: HashSet<Intent>,
-    relations: HashMap<Pair, Relation>,
-    limits: HashMap<String, Limits>,
+    relations: HashSet<Pair>,
 }
 
 struct Identity {
-    fingerprint: String,
-    #[allow(dead_code)]
-    public_key: String,
-    session: Option<Session>,
+    nickname: String,
+    public_key: Vec<u8>,
+    session: Option<SessionChannel>,
+    disconnected_session: Option<String>,
 }
 
-#[derive(Clone)]
-struct Session {
-    id: String,
-    sender: SessionChannel,
-}
-
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct Intent {
     session_id: String,
     from: String,
     to: String,
 }
 
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct Pair(String, String);
 
 impl Pair {
-    fn new(a: &str, b: &str) -> Self {
-        if a <= b {
-            Self(a.to_owned(), b.to_owned())
+    fn new(first: &str, second: &str) -> Self {
+        if first <= second {
+            Self(first.to_owned(), second.to_owned())
         } else {
-            Self(b.to_owned(), a.to_owned())
+            Self(second.to_owned(), first.to_owned())
         }
     }
 
-    fn other(&self, fingerprint: &str) -> Option<&str> {
-        if self.0 == fingerprint {
+    fn other<'a>(&'a self, identity: &str) -> Option<&'a str> {
+        if self.0 == identity {
             Some(&self.1)
-        } else if self.1 == fingerprint {
+        } else if self.1 == identity {
             Some(&self.0)
         } else {
             None
@@ -204,794 +198,395 @@ impl Pair {
     }
 }
 
-#[derive(Default)]
-struct Relation {
-    grants: HashSet<String>,
-    epoch: Option<String>,
-}
-
-impl Relation {
-    fn active(&self) -> bool {
-        self.grants.len() == 2 && self.epoch.is_some()
-    }
-}
-
-#[derive(Default)]
-struct Limits {
-    messages: VecDeque<Instant>,
-    contacts: VecDeque<Instant>,
-    violations: u8,
-}
-
 impl AppState {
     pub fn register(
         &mut self,
+        tacitus_id: &str,
         nickname: &str,
-        fingerprint: &str,
-        public_key: String,
-        session_id: String,
-        sender: SessionChannel,
-    ) -> Result<Registration, StateError> {
-        let nickname = normalize_nickname(nickname)?;
-        let fingerprint = fingerprint.to_ascii_lowercase();
-        if self
-            .nickname_by_fingerprint
-            .get(&fingerprint)
-            .is_some_and(|registered| registered != &nickname)
-        {
-            return Err(StateError::NicknameUnavailable);
-        }
-
-        let replaced = if let Some(identity) = self.identities.get_mut(&nickname) {
-            if identity.fingerprint != fingerprint {
-                return Err(StateError::NicknameUnavailable);
+        public_key: Vec<u8>,
+        session: SessionChannel,
+    ) -> Result<Vec<Delivery>, StateError> {
+        parse_tacitus_id(tacitus_id).map_err(|_| StateError::AuthenticationFailed)?;
+        if let Some(identity) = self.identities.get_mut(tacitus_id) {
+            if identity.public_key != public_key || identity.nickname != nickname {
+                return Err(StateError::IdentityCollision);
             }
-            identity.public_key = public_key;
-            identity
-                .session
-                .replace(Session {
-                    id: session_id.clone(),
-                    sender: sender.clone(),
-                })
-                .map(|session| session.sender)
+            if let Some(replaced) = identity.session.replace(session.clone()) {
+                self.identity_by_session.remove(replaced.id());
+                self.intents
+                    .retain(|intent| intent.session_id != replaced.id());
+                replaced.close();
+            }
+            identity.disconnected_session = None;
         } else {
-            self.nickname_by_fingerprint
-                .insert(fingerprint.clone(), nickname.clone());
             self.identities.insert(
-                nickname.clone(),
+                tacitus_id.to_owned(),
                 Identity {
-                    fingerprint: fingerprint.clone(),
+                    nickname: nickname.to_owned(),
                     public_key,
-                    session: Some(Session {
-                        id: session_id.clone(),
-                        sender: sender.clone(),
-                    }),
+                    session: Some(session.clone()),
+                    disconnected_session: None,
                 },
             );
-            None
-        };
-
-        if let Some(old_session) = self.fingerprint_by_session.iter().find_map(|(id, value)| {
-            (value == &fingerprint && id != &session_id).then(|| id.clone())
-        }) {
-            self.fingerprint_by_session.remove(&old_session);
-            self.intents
-                .retain(|intent| intent.session_id != old_session);
-            self.limits.remove(&old_session);
         }
-        self.fingerprint_by_session
-            .insert(session_id.clone(), fingerprint.clone());
-        self.limits.entry(session_id).or_default();
+        self.identity_by_session
+            .insert(session.id().to_owned(), tacitus_id.to_owned());
 
         let mut deliveries = Vec::new();
-        for (pair, relation) in &self.relations {
-            if let Some(other) = pair.other(&fingerprint) {
-                if relation.active()
-                    && let Some(epoch) = &relation.epoch
-                {
-                    deliveries.extend(self.matched_deliveries(&fingerprint, other, epoch));
-                } else {
-                    deliveries.push(Delivery {
-                        sender: sender.clone(),
-                        frame: ServerFrame::ContactState {
-                            v: 1,
-                            fingerprint: other.to_owned(),
-                            active: false,
-                            nickname: None,
-                            relationship_epoch: None,
-                        },
-                    });
-                }
+        for pair in &self.relations {
+            let Some(peer_id) = pair.other(tacitus_id) else {
+                continue;
+            };
+            let Some(peer) = self.identities.get(peer_id) else {
+                continue;
+            };
+            deliveries.push(Delivery::new(
+                session.clone(),
+                ServerFrame::ContactMatched {
+                    v: 2,
+                    tacitus_id: peer_id.to_owned(),
+                    nickname: peer.nickname.clone(),
+                    online: peer.session.is_some(),
+                },
+            ));
+            if let Some(peer_session) = &peer.session {
+                deliveries.push(Delivery::new(
+                    peer_session.clone(),
+                    ServerFrame::PresenceChanged {
+                        v: 2,
+                        tacitus_id: tacitus_id.to_owned(),
+                        online: true,
+                    },
+                ));
             }
         }
-        if let Some(replaced) = replaced {
-            replaced.close();
-        }
-        Ok(Registration {
-            nickname,
-            deliveries,
-        })
+        Ok(deliveries)
     }
 
-    pub fn disconnect(&mut self, session_id: &str) -> Vec<Delivery> {
-        let Some(fingerprint) = self.fingerprint_by_session.remove(session_id) else {
+    pub fn unregister(&mut self, session_id: &str) -> Vec<Delivery> {
+        let Some(tacitus_id) = self.identity_by_session.remove(session_id) else {
             return Vec::new();
         };
-        let Some(nickname) = self.nickname_by_fingerprint.get(&fingerprint) else {
+        let Some(identity) = self.identities.get_mut(&tacitus_id) else {
             return Vec::new();
         };
-        let Some(identity) = self.identities.get_mut(nickname) else {
-            return Vec::new();
-        };
-        if identity.session.as_ref().map(|session| session.id.as_str()) != Some(session_id) {
+        if identity.session.as_ref().map(SessionChannel::id) != Some(session_id) {
             return Vec::new();
         }
         identity.session = None;
+        identity.disconnected_session = Some(session_id.to_owned());
         self.intents
             .retain(|intent| intent.session_id != session_id);
-        self.limits.remove(session_id);
-
         self.relations
             .iter()
-            .filter(|(pair, relation)| relation.active() && pair.other(&fingerprint).is_some())
-            .filter_map(|(pair, _)| pair.other(&fingerprint))
-            .filter_map(|other| self.online_sender(other))
-            .map(|sender| Delivery {
-                sender,
-                frame: ServerFrame::PresenceChanged {
-                    v: 1,
-                    fingerprint: fingerprint.clone(),
-                    online: false,
-                },
+            .filter_map(|pair| pair.other(&tacitus_id))
+            .filter_map(|peer_id| {
+                self.identities
+                    .get(peer_id)
+                    .and_then(|peer| peer.session.clone())
+            })
+            .map(|recipient| {
+                Delivery::new(
+                    recipient,
+                    ServerFrame::PresenceChanged {
+                        v: 2,
+                        tacitus_id: tacitus_id.clone(),
+                        online: false,
+                    },
+                )
             })
             .collect()
+    }
+
+    pub fn expire_disconnect(&mut self, tacitus_id: &str, session_id: &str) -> Vec<Delivery> {
+        let Some(identity) = self.identities.get_mut(tacitus_id) else {
+            return Vec::new();
+        };
+        if identity.session.is_some()
+            || identity.disconnected_session.as_deref() != Some(session_id)
+        {
+            return Vec::new();
+        }
+        identity.disconnected_session = None;
+
+        let relations = self
+            .relations
+            .iter()
+            .filter(|pair| pair.other(tacitus_id).is_some())
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut deliveries = Vec::new();
+        for relation in relations {
+            self.relations.remove(&relation);
+            let Some(peer_id) = relation.other(tacitus_id).map(str::to_owned) else {
+                continue;
+            };
+            let Some(peer_session) = self
+                .identities
+                .get(&peer_id)
+                .and_then(|peer| peer.session.clone())
+            else {
+                continue;
+            };
+            self.intents.insert(Intent {
+                session_id: peer_session.id().to_owned(),
+                from: peer_id,
+                to: tacitus_id.to_owned(),
+            });
+            deliveries.push(Delivery::new(
+                peer_session,
+                ServerFrame::ContactPending {
+                    v: 2,
+                    request_id: None,
+                    tacitus_id: tacitus_id.to_owned(),
+                },
+            ));
+        }
+        deliveries
     }
 
     pub fn add_contact(
         &mut self,
         session_id: &str,
-        target_fingerprint: &str,
-        request_id: String,
-    ) -> Result<Transition, StateError> {
-        let (from, from_sender) = self.session_identity(session_id)?;
-        let target = target_fingerprint.to_ascii_lowercase();
-        if from == target {
+        request_id: &str,
+        target_id: &str,
+    ) -> Result<Vec<Delivery>, StateError> {
+        parse_tacitus_id(target_id).map_err(|_| StateError::InvalidRequest)?;
+        let from_id = self.identity_for_session(session_id)?.to_owned();
+        if from_id == target_id {
             return Err(StateError::InvalidRequest);
         }
+        let pair = Pair::new(&from_id, target_id);
+        if self.relations.contains(&pair) {
+            return self.relation_snapshot(session_id, target_id);
+        }
         if self
-            .relations
-            .get(&Pair::new(&from, &target))
-            .is_some_and(Relation::active)
+            .intents
+            .iter()
+            .filter(|intent| intent.session_id == session_id)
+            .count()
+            >= MAX_PENDING_CONTACTS
         {
-            return Err(StateError::ContactUnavailable);
+            return Err(StateError::TooManyContacts);
         }
-        let intent = Intent {
+        self.intents.insert(Intent {
             session_id: session_id.to_owned(),
-            from: from.clone(),
-            to: target.clone(),
-        };
-        if !self.intents.contains(&intent)
-            && self
-                .intents
-                .iter()
-                .filter(|item| item.session_id == session_id)
-                .count()
-                >= 20
-        {
-            return Err(self.rate_violation(session_id)?);
-        }
-        self.intents.insert(intent);
-        let mut transition = Transition {
-            deliveries: vec![Delivery {
-                sender: from_sender,
-                frame: ServerFrame::ContactPending {
-                    v: 1,
-                    request_id,
-                    target_fingerprint: target.clone(),
-                },
-            }],
-            log: None,
-        };
-
-        let Some(target_session) = self.online_session(&target) else {
-            return Ok(transition);
-        };
-        let reverse = Intent {
-            session_id: target_session.id,
-            from: target.clone(),
-            to: from.clone(),
-        };
-        if !self.intents.contains(&reverse) {
-            return Ok(transition);
-        }
-
-        self.intents.retain(|item| {
-            !((item.from == from && item.to == target) || (item.from == target && item.to == from))
+            from: from_id.clone(),
+            to: target_id.to_owned(),
         });
-        let pair = Pair::new(&from, &target);
-        let relation = self.relations.entry(pair).or_default();
-        let was_known = !relation.grants.is_empty();
-        relation.grants.insert(from.clone());
-        relation.grants.insert(target.clone());
-        let epoch = random_token::<16>();
-        relation.epoch = Some(epoch.clone());
-        transition
-            .deliveries
-            .extend(self.matched_deliveries(&from, &target, &epoch));
-        transition.log = Some(self.relation_log(
-            if was_known {
-                "relation_restored"
-            } else {
-                "relation_created"
-            },
-            &from,
-            &target,
-        ));
-        Ok(transition)
+        let reverse = self.intents.iter().any(|intent| {
+            intent.from == target_id
+                && intent.to == from_id
+                && self
+                    .identity_by_session
+                    .get(&intent.session_id)
+                    .is_some_and(|identity| identity == target_id)
+        });
+        if !reverse {
+            return Ok(vec![Delivery::new(
+                self.session(session_id)?,
+                ServerFrame::ContactPending {
+                    v: 2,
+                    request_id: Some(request_id.to_owned()),
+                    tacitus_id: target_id.to_owned(),
+                },
+            )]);
+        }
+        self.relations.insert(pair);
+        self.intents.retain(|intent| {
+            !((intent.from == from_id && intent.to == target_id)
+                || (intent.from == target_id && intent.to == from_id))
+        });
+        let own = self
+            .identities
+            .get(&from_id)
+            .ok_or(StateError::ContactUnavailable)?;
+        let peer = self
+            .identities
+            .get(target_id)
+            .ok_or(StateError::ContactUnavailable)?;
+        let own_session = own.session.clone().ok_or(StateError::ContactUnavailable)?;
+        let peer_session = peer.session.clone().ok_or(StateError::ContactUnavailable)?;
+        Ok(vec![
+            Delivery::new(
+                own_session,
+                ServerFrame::ContactMatched {
+                    v: 2,
+                    tacitus_id: target_id.to_owned(),
+                    nickname: peer.nickname.clone(),
+                    online: true,
+                },
+            ),
+            Delivery::new(
+                peer_session,
+                ServerFrame::ContactMatched {
+                    v: 2,
+                    tacitus_id: from_id,
+                    nickname: own.nickname.clone(),
+                    online: true,
+                },
+            ),
+        ])
     }
 
     pub fn cancel_contact(
         &mut self,
         session_id: &str,
-        target_fingerprint: &str,
-    ) -> Result<Transition, StateError> {
-        let (from, sender) = self.session_identity(session_id)?;
-        let target = target_fingerprint.to_ascii_lowercase();
-        let before = self.intents.len();
+        request_id: &str,
+        target_id: &str,
+    ) -> Result<Vec<Delivery>, StateError> {
+        parse_tacitus_id(target_id).map_err(|_| StateError::InvalidRequest)?;
+        let from_id = self.identity_for_session(session_id)?.to_owned();
         self.intents.retain(|intent| {
-            !(intent.session_id == session_id && intent.from == from && intent.to == target)
+            !(intent.session_id == session_id && intent.from == from_id && intent.to == target_id)
         });
-        if self.intents.len() == before {
-            return Err(StateError::ContactUnavailable);
-        }
-        Ok(Transition {
-            deliveries: vec![Delivery {
-                sender,
-                frame: ServerFrame::ContactState {
-                    v: 1,
-                    fingerprint: target,
+        Ok(vec![
+            Delivery::new(
+                self.session(session_id)?,
+                ServerFrame::ContactState {
+                    v: 2,
+                    tacitus_id: target_id.to_owned(),
                     active: false,
-                    nickname: None,
-                    relationship_epoch: None,
                 },
-            }],
-            log: None,
-        })
+            ),
+            Delivery::new(
+                self.session(session_id)?,
+                ServerFrame::ContactRemoved {
+                    v: 2,
+                    request_id: request_id.to_owned(),
+                    tacitus_id: target_id.to_owned(),
+                },
+            ),
+        ])
     }
 
-    pub fn block_contact(
+    pub fn remove_contact(
         &mut self,
         session_id: &str,
-        target_fingerprint: &str,
-    ) -> Result<Transition, StateError> {
-        let (from, _) = self.session_identity(session_id)?;
-        let target = target_fingerprint.to_ascii_lowercase();
-        let relation = self
-            .relations
-            .get_mut(&Pair::new(&from, &target))
-            .ok_or(StateError::ContactUnavailable)?;
-        if !relation.grants.remove(&from) {
-            return Err(StateError::ContactUnavailable);
+        request_id: &str,
+        target_id: &str,
+    ) -> Result<Vec<Delivery>, StateError> {
+        parse_tacitus_id(target_id).map_err(|_| StateError::InvalidRequest)?;
+        let from_id = self.identity_for_session(session_id)?.to_owned();
+        self.relations.remove(&Pair::new(&from_id, target_id));
+        self.intents.retain(|intent| {
+            !((intent.from == from_id && intent.to == target_id)
+                || (intent.from == target_id && intent.to == from_id))
+        });
+        let mut deliveries = vec![Delivery::new(
+            self.session(session_id)?,
+            ServerFrame::ContactRemoved {
+                v: 2,
+                request_id: request_id.to_owned(),
+                tacitus_id: target_id.to_owned(),
+            },
+        )];
+        if let Some(peer) = self
+            .identities
+            .get(target_id)
+            .and_then(|identity| identity.session.clone())
+        {
+            deliveries.push(Delivery::new(
+                peer,
+                ServerFrame::ContactState {
+                    v: 2,
+                    tacitus_id: from_id,
+                    active: false,
+                },
+            ));
         }
-        relation.epoch = None;
-        self.intents
-            .retain(|intent| !(intent.from == from && intent.to == target));
-        Ok(Transition {
-            deliveries: self.inactive_deliveries(&from, &target),
-            log: Some(self.relation_log("relation_blocked", &from, &target)),
-        })
+        Ok(deliveries)
     }
 
-    pub fn unblock_contact(
-        &mut self,
-        session_id: &str,
-        target_fingerprint: &str,
-    ) -> Result<Transition, StateError> {
-        let (from, _) = self.session_identity(session_id)?;
-        let target = target_fingerprint.to_ascii_lowercase();
-        let relation = self
-            .relations
-            .get_mut(&Pair::new(&from, &target))
-            .ok_or(StateError::ContactUnavailable)?;
-        if !relation.grants.insert(from.clone()) {
-            return Err(StateError::ContactUnavailable);
-        }
-        if !relation.grants.contains(&target) {
-            return Ok(Transition {
-                deliveries: self.inactive_deliveries(&from, &target),
-                log: None,
-            });
-        }
-        let epoch = random_token::<16>();
-        relation.epoch = Some(epoch.clone());
-        Ok(Transition {
-            deliveries: self.matched_deliveries(&from, &target, &epoch),
-            log: Some(self.relation_log("relation_restored", &from, &target)),
-        })
-    }
-
-    pub fn route_message(
+    pub fn route(
         &self,
         session_id: &str,
-        target_fingerprint: &str,
-        message_id: String,
-        ciphertext: String,
-    ) -> Result<MessageRoute, StateError> {
-        if ciphertext.len() > 60 * 1024 || message_id.is_empty() || message_id.len() > 64 {
-            return Err(StateError::MessageTooLarge);
+        request_id: &str,
+        target_id: &str,
+        kind: PayloadKind,
+        body: String,
+    ) -> Result<Vec<Delivery>, StateError> {
+        if body.is_empty() || body.len() > MAX_RELAY_BODY_BYTES {
+            return Err(StateError::PayloadTooLarge);
         }
-        let (from, _) = self.session_identity(session_id)?;
-        let target = target_fingerprint.to_ascii_lowercase();
-        let relation = self
-            .relations
-            .get(&Pair::new(&from, &target))
-            .filter(|relation| relation.active())
-            .ok_or(StateError::ContactUnavailable)?;
-        if !relation.grants.contains(&from) || !relation.grants.contains(&target) {
+        let from_id = self.identity_for_session(session_id)?;
+        if !self.relations.contains(&Pair::new(from_id, target_id)) {
             return Err(StateError::ContactUnavailable);
         }
-        let sender = self
-            .online_sender(&target)
-            .ok_or(StateError::ContactUnavailable)?;
-        let nickname = self
-            .nickname(&from)
-            .ok_or(StateError::AuthenticationFailed)?;
-        Ok(MessageRoute {
-            sender,
-            frame: ServerFrame::MessageReceived {
-                v: 1,
-                message_id,
-                nickname,
-                from_fingerprint: from,
-                ciphertext,
-            },
-        })
-    }
-
-    pub fn check_rate(
-        &mut self,
-        session_id: &str,
-        kind: RateKind,
-        now: Instant,
-    ) -> Result<(), StateError> {
-        let limits = self
-            .limits
-            .get_mut(session_id)
-            .ok_or(StateError::AuthenticationFailed)?;
-        let (attempts, window, maximum) = match kind {
-            RateKind::Message => (&mut limits.messages, Duration::from_secs(1), 10),
-            RateKind::Contact => (&mut limits.contacts, Duration::from_secs(60), 10),
-        };
-        while attempts
-            .front()
-            .is_some_and(|time| now.duration_since(*time) >= window)
-        {
-            attempts.pop_front();
-        }
-        if attempts.len() >= maximum {
-            limits.violations = limits.violations.saturating_add(1);
-            return Err(StateError::RateLimited {
-                close: limits.violations >= 3,
-            });
-        }
-        attempts.push_back(now);
-        Ok(())
-    }
-
-    fn session_identity(&self, session_id: &str) -> Result<(String, SessionChannel), StateError> {
-        let fingerprint = self
-            .fingerprint_by_session
-            .get(session_id)
-            .ok_or(StateError::AuthenticationFailed)?;
-        let session = self
-            .online_session(fingerprint)
-            .filter(|session| session.id == session_id)
-            .ok_or(StateError::AuthenticationFailed)?;
-        Ok((fingerprint.clone(), session.sender))
-    }
-
-    fn online_session(&self, fingerprint: &str) -> Option<Session> {
-        self.nickname_by_fingerprint
-            .get(fingerprint)
-            .and_then(|nickname| self.identities.get(nickname))
+        let sender = self.session(session_id)?;
+        let recipient = self
+            .identities
+            .get(target_id)
             .and_then(|identity| identity.session.clone())
+            .ok_or(StateError::ContactUnavailable)?;
+        let (ack, received) = match kind {
+            PayloadKind::Handshake => (
+                ServerFrame::HandshakeSent {
+                    v: 2,
+                    request_id: request_id.to_owned(),
+                },
+                ServerFrame::HandshakeReceived {
+                    v: 2,
+                    from_id: from_id.to_owned(),
+                    body,
+                },
+            ),
+            PayloadKind::Message => (
+                ServerFrame::MessageSent {
+                    v: 2,
+                    request_id: request_id.to_owned(),
+                },
+                ServerFrame::MessageReceived {
+                    v: 2,
+                    from_id: from_id.to_owned(),
+                    body,
+                },
+            ),
+        };
+        Ok(vec![
+            Delivery::new(sender, ack),
+            Delivery::new(recipient, received),
+        ])
     }
 
-    fn online_sender(&self, fingerprint: &str) -> Option<SessionChannel> {
-        self.online_session(fingerprint)
-            .map(|session| session.sender)
+    pub fn is_online(&self, tacitus_id: &str) -> bool {
+        self.identities
+            .get(tacitus_id)
+            .is_some_and(|identity| identity.session.is_some())
     }
 
-    fn nickname(&self, fingerprint: &str) -> Option<String> {
-        self.nickname_by_fingerprint.get(fingerprint).cloned()
+    fn relation_snapshot(
+        &self,
+        session_id: &str,
+        target_id: &str,
+    ) -> Result<Vec<Delivery>, StateError> {
+        let peer = self
+            .identities
+            .get(target_id)
+            .ok_or(StateError::ContactUnavailable)?;
+        Ok(vec![Delivery::new(
+            self.session(session_id)?,
+            ServerFrame::ContactMatched {
+                v: 2,
+                tacitus_id: target_id.to_owned(),
+                nickname: peer.nickname.clone(),
+                online: peer.session.is_some(),
+            },
+        )])
     }
 
-    fn matched_deliveries(&self, a: &str, b: &str, epoch: &str) -> Vec<Delivery> {
-        [(a, b), (b, a)]
-            .into_iter()
-            .filter_map(|(recipient, contact)| {
-                Some((
-                    self.online_sender(recipient)?,
-                    self.nickname(contact)?,
-                    contact,
-                ))
-            })
-            .flat_map(|(sender, nickname, contact)| {
-                [
-                    Delivery {
-                        sender: sender.clone(),
-                        frame: ServerFrame::ContactMatched {
-                            v: 1,
-                            nickname,
-                            fingerprint: contact.to_owned(),
-                            relationship_epoch: epoch.to_owned(),
-                        },
-                    },
-                    Delivery {
-                        sender,
-                        frame: ServerFrame::PresenceChanged {
-                            v: 1,
-                            fingerprint: contact.to_owned(),
-                            online: self.online_session(contact).is_some(),
-                        },
-                    },
-                ]
-            })
-            .collect()
+    fn identity_for_session(&self, session_id: &str) -> Result<&str, StateError> {
+        self.identity_by_session
+            .get(session_id)
+            .map(String::as_str)
+            .ok_or(StateError::AuthenticationFailed)
     }
 
-    fn inactive_deliveries(&self, a: &str, b: &str) -> Vec<Delivery> {
-        [(a, b), (b, a)]
-            .into_iter()
-            .filter_map(|(recipient, contact)| {
-                Some(Delivery {
-                    sender: self.online_sender(recipient)?,
-                    frame: ServerFrame::ContactState {
-                        v: 1,
-                        fingerprint: contact.to_owned(),
-                        active: false,
-                        nickname: None,
-                        relationship_epoch: None,
-                    },
-                })
-            })
-            .collect()
-    }
-
-    fn relation_log(&self, event: &str, from: &str, target: &str) -> String {
-        format!(
-            "{} {} {}",
-            event,
-            self.nickname(from).unwrap_or_default(),
-            self.nickname(target).unwrap_or_default()
-        )
-    }
-
-    fn rate_violation(&mut self, session_id: &str) -> Result<StateError, StateError> {
-        let limits = self
-            .limits
-            .get_mut(session_id)
-            .ok_or(StateError::AuthenticationFailed)?;
-        limits.violations = limits.violations.saturating_add(1);
-        Ok(StateError::RateLimited {
-            close: limits.violations >= 3,
-        })
-    }
-}
-
-fn normalize_nickname(nickname: &str) -> Result<String, StateError> {
-    let nickname = nickname.to_ascii_lowercase();
-    if (3..=24).contains(&nickname.len())
-        && nickname
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
-    {
-        Ok(nickname)
-    } else {
-        Err(StateError::InvalidRequest)
-    }
-}
-
-pub fn random_token<const N: usize>() -> String {
-    URL_SAFE_NO_PAD.encode(rand::random::<[u8; N]>())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn sender(session: &str) -> SessionChannel {
-        SessionChannel::new(session.into()).0
-    }
-
-    fn register(
-        state: &mut AppState,
-        nickname: &str,
-        fingerprint: &str,
-        session: &str,
-    ) -> Registration {
-        state
-            .register(
-                nickname,
-                fingerprint,
-                format!("PUBLIC {nickname}"),
-                session.into(),
-                sender(session),
-            )
-            .unwrap()
-    }
-
-    fn match_contacts(state: &mut AppState) -> String {
-        state
-            .add_contact("alice-session", "bob-fp", "a".into())
-            .unwrap();
-        let transition = state
-            .add_contact("bob-session", "alice-fp", "b".into())
-            .unwrap();
-        transition
-            .deliveries
-            .iter()
-            .find_map(|delivery| match &delivery.frame {
-                ServerFrame::ContactMatched {
-                    relationship_epoch, ..
-                } => Some(relationship_epoch.clone()),
-                _ => None,
-            })
-            .unwrap()
-    }
-
-    #[test]
-    fn nickname_is_normalized_and_cannot_change_key() {
-        let mut state = AppState::default();
-        register(&mut state, "Alice_1", "fingerprint-a", "session-a");
-        assert_eq!(
-            state
-                .register(
-                    "alice_1",
-                    "fingerprint-b",
-                    "PUBLIC".into(),
-                    "session-b".into(),
-                    sender("session-b")
-                )
-                .unwrap_err(),
-            StateError::NicknameUnavailable,
-        );
-        assert_eq!(
-            state
-                .register(
-                    "no",
-                    "fingerprint-c",
-                    "PUBLIC".into(),
-                    "session-c".into(),
-                    sender("session-c")
-                )
-                .unwrap_err(),
-            StateError::InvalidRequest,
-        );
-    }
-
-    #[test]
-    fn replacement_session_survives_old_cleanup() {
-        let mut state = AppState::default();
-        let (old, _frames, close) = SessionChannel::new("old".into());
-        state
-            .register("alice", "alice-fp", "PUBLIC".into(), "old".into(), old)
-            .unwrap();
-        register(&mut state, "alice", "alice-fp", "new");
-        assert!(*close.borrow());
-        assert!(state.disconnect("old").is_empty());
-        assert_eq!(state.fingerprint_by_session.get("new").unwrap(), "alice-fp");
-    }
-
-    #[test]
-    fn match_requires_both_intents_and_never_contains_public_key() {
-        let mut state = AppState::default();
-        register(&mut state, "alice", "alice-fp", "alice-session");
-        register(&mut state, "bob", "bob-fp", "bob-session");
-        let first = state
-            .add_contact("alice-session", "bob-fp", "a".into())
-            .unwrap();
-        assert_eq!(first.deliveries.len(), 1);
-        assert_eq!(first.deliveries[0].sender.id(), "alice-session");
-        assert!(matches!(
-            first.deliveries[0].frame,
-            ServerFrame::ContactPending { .. }
-        ));
-
-        let second = state
-            .add_contact("bob-session", "alice-fp", "b".into())
-            .unwrap();
-        let json = serde_json::to_string(
-            &second
-                .deliveries
-                .iter()
-                .find(|delivery| matches!(delivery.frame, ServerFrame::ContactMatched { .. }))
-                .unwrap()
-                .frame,
-        )
-        .unwrap();
-        assert!(!json.contains("PUBLIC"));
-        assert_eq!(second.log.as_deref(), Some("relation_created bob alice"));
-    }
-
-    #[test]
-    fn disconnect_removes_pending_intents() {
-        let mut state = AppState::default();
-        register(&mut state, "alice", "alice-fp", "alice-session");
-        register(&mut state, "bob", "bob-fp", "bob-session");
-        state
-            .add_contact("alice-session", "bob-fp", "a".into())
-            .unwrap();
-        state.disconnect("alice-session");
-        register(&mut state, "alice", "alice-fp", "alice-new");
-        let result = state
-            .add_contact("bob-session", "alice-fp", "b".into())
-            .unwrap();
-        assert!(
-            !result
-                .deliveries
-                .iter()
-                .any(|delivery| matches!(delivery.frame, ServerFrame::ContactMatched { .. }))
-        );
-    }
-
-    #[test]
-    fn block_and_unblock_rotate_epoch() {
-        let mut state = AppState::default();
-        register(&mut state, "alice", "alice-fp", "alice-session");
-        register(&mut state, "bob", "bob-fp", "bob-session");
-        let first_epoch = match_contacts(&mut state);
-        assert_eq!(
-            state
-                .block_contact("alice-session", "bob-fp")
-                .unwrap()
-                .log
-                .as_deref(),
-            Some("relation_blocked alice bob")
-        );
-        let restored = state.unblock_contact("alice-session", "bob-fp").unwrap();
-        let second_epoch = restored
-            .deliveries
-            .iter()
-            .find_map(|delivery| match &delivery.frame {
-                ServerFrame::ContactMatched {
-                    relationship_epoch, ..
-                } => Some(relationship_epoch.clone()),
-                _ => None,
-            })
-            .unwrap();
-        assert_ne!(first_epoch, second_epoch);
-        assert_eq!(
-            state
-                .unblock_contact("alice-session", "bob-fp")
-                .unwrap_err(),
-            StateError::ContactUnavailable,
-        );
-        assert_eq!(
-            state
-                .add_contact("alice-session", "bob-fp", "again".into())
-                .unwrap_err(),
-            StateError::ContactUnavailable,
-        );
-        assert_eq!(
-            state.cancel_contact("alice-session", "bob-fp").unwrap_err(),
-            StateError::ContactUnavailable,
-        );
-
-        state.block_contact("alice-session", "bob-fp").unwrap();
-        state.disconnect("alice-session");
-        let registration = register(&mut state, "alice", "alice-fp", "alice-new");
-        assert!(registration.deliveries.iter().any(|delivery| matches!(
-            delivery.frame,
-            ServerFrame::ContactState {
-                active: false,
-                ref fingerprint,
-                ..
-            } if fingerprint == "bob-fp"
-        )));
-    }
-
-    #[test]
-    fn unblock_cannot_create_a_relation() {
-        let mut state = AppState::default();
-        register(&mut state, "alice", "alice-fp", "alice-session");
-        assert_eq!(
-            state
-                .unblock_contact("alice-session", "bob-fp")
-                .unwrap_err(),
-            StateError::ContactUnavailable,
-        );
-    }
-
-    #[test]
-    fn presence_and_messages_are_visible_only_in_active_relations() {
-        let mut state = AppState::default();
-        register(&mut state, "alice", "alice-fp", "alice-session");
-        register(&mut state, "bob", "bob-fp", "bob-session");
-        assert_eq!(
-            state
-                .route_message("alice-session", "bob-fp", "id".into(), "ciphertext".into())
-                .unwrap_err(),
-            StateError::ContactUnavailable,
-        );
-        match_contacts(&mut state);
-        assert!(
-            state
-                .route_message("alice-session", "bob-fp", "id".into(), "ciphertext".into())
-                .is_ok()
-        );
-        assert_eq!(
-            state
-                .route_message(
-                    "alice-session",
-                    "bob-fp",
-                    "id".into(),
-                    "x".repeat(60 * 1024 + 1),
-                )
-                .unwrap_err(),
-            StateError::MessageTooLarge,
-        );
-        let deliveries = state.disconnect("bob-session");
-        assert_eq!(deliveries.len(), 1);
-        assert!(matches!(
-            deliveries[0].frame,
-            ServerFrame::PresenceChanged { online: false, .. }
-        ));
-        assert_eq!(
-            state
-                .route_message("alice-session", "bob-fp", "id".into(), "ciphertext".into())
-                .unwrap_err(),
-            StateError::ContactUnavailable,
-        );
-    }
-
-    #[test]
-    fn rate_limits_close_after_repeated_violations() {
-        let mut state = AppState::default();
-        register(&mut state, "alice", "alice-fp", "alice-session");
-        let now = Instant::now();
-        for _ in 0..10 {
-            state
-                .check_rate("alice-session", RateKind::Message, now)
-                .unwrap();
-        }
-        for close in [false, false, true] {
-            assert_eq!(
-                state.check_rate("alice-session", RateKind::Message, now),
-                Err(StateError::RateLimited { close }),
-            );
-        }
-
-        let mut contact_rate = AppState::default();
-        register(&mut contact_rate, "alice", "alice-fp", "alice-session");
-        for _ in 0..10 {
-            contact_rate
-                .check_rate("alice-session", RateKind::Contact, now)
-                .unwrap();
-        }
-        assert_eq!(
-            contact_rate.check_rate("alice-session", RateKind::Contact, now),
-            Err(StateError::RateLimited { close: false }),
-        );
-
-        let mut contacts = AppState::default();
-        register(&mut contacts, "alice", "alice-fp", "alice-session");
-        for index in 0..20 {
-            contacts
-                .add_contact(
-                    "alice-session",
-                    &format!("target-{index}"),
-                    index.to_string(),
-                )
-                .unwrap();
-        }
-        for close in [false, false, true] {
-            assert_eq!(
-                contacts
-                    .add_contact("alice-session", "target-overflow", "overflow".into())
-                    .unwrap_err(),
-                StateError::RateLimited { close },
-            );
-        }
+    fn session(&self, session_id: &str) -> Result<SessionChannel, StateError> {
+        let identity = self.identity_for_session(session_id)?;
+        self.identities
+            .get(identity)
+            .and_then(|identity| identity.session.clone())
+            .ok_or(StateError::AuthenticationFailed)
     }
 }

@@ -1,0 +1,3 @@
+[default]
+description = "Create, use and delete the device-bound Tacitus identity"
+permissions = ["allow-get-or-create", "allow-sign", "allow-seal", "allow-open", "allow-delete"]

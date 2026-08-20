@@ -1,0 +1,4 @@
+[workspace]
+members = ["backend", "protocol"]
+exclude = ["frontend/src-tauri"]
+resolver = "3"

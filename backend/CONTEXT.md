@@ -5,7 +5,7 @@ Tacitus consente a due persone contemporaneamente online di stabilire un contatt
 ## Language
 
 **Identità**:
-Il nickname immutabile, il Tacitus ID e il documento pubblico registrati insieme soltanto mentre l'Identità è online.
+Il nickname immutabile, il Tacitus ID e la chiave pubblica legati in memoria dal relay.
 _Avoid_: Account, profilo
 
 **Tacitus ID**:
@@ -21,7 +21,7 @@ La volontà unilaterale e temporanea di stabilire una Relazione con un Contatto.
 _Avoid_: Richiesta di amicizia, invito
 
 **Relazione**:
-Il consenso reciproco tra due Identità, valido per una specifica coppia di Tacitus ID e per un epoch.
+Il consenso reciproco tra due Identità, valido per una specifica coppia di Tacitus ID fino a rimozione o riavvio.
 _Avoid_: Amicizia, connessione
 
 **Messaggio cifrato**:

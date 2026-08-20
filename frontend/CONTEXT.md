@@ -8,6 +8,10 @@ Tacitus consente a due persone contemporaneamente online di stabilire un contatt
 L'identità crittografica generata per una singola installazione, riconosciuta pubblicamente dalla coppia composta da nickname immutabile e Tacitus ID.
 _Avoid_: Account, profilo, utente locale
 
+**Provider di Identità**:
+La capacità della piattaforma di creare la chiave privata non esportabile dell'Identità locale e firmare senza esporla al protocollo condiviso.
+_Avoid_: Keystore, wallet
+
 **Tacitus ID**:
 L'identificatore pubblico corto derivato dall'Identità locale, usato per stabilire un contatto mentre entrambe le Identità sono online. Non è una credenziale di autorizzazione.
 _Avoid_: Fingerprint, username, account ID
@@ -21,15 +25,19 @@ La volontà unilaterale e temporanea di stabilire una relazione con un Contatto.
 _Avoid_: Richiesta di amicizia, invito
 
 **Relazione**:
-Il consenso reciproco tra due Identità, valido per una specifica coppia di Tacitus ID e per un epoch.
+Il consenso reciproco corrente tra due Identità, valido per una specifica coppia di Tacitus ID.
 _Avoid_: Amicizia, connessione
+
+**Sessione sicura**:
+Lo stato crittografico volatile stabilito da due Identità per proteggere i Messaggi cifrati di una Relazione; può cambiare senza creare una nuova Conversazione.
+_Avoid_: Relazione, Conversazione
 
 **Conversazione**:
 La cronologia locale cifrata associata a un Contatto, mantenuta tra connessioni e cancellata definitivamente insieme al Contatto o all'Identità locale.
 _Avoid_: Relazione, stanza, canale
 
 **Messaggio cifrato**:
-Un testo cifrato end-to-end per le Identità di una Relazione.
+La rappresentazione end-to-end cifrata di un testo scambiato nella Sessione sicura.
 _Avoid_: Payload, messaggio in chiaro
 
 **Contenuto del messaggio**:

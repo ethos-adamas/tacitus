@@ -1,7 +1,3 @@
-mod auth;
-mod state;
-
-use auth::{Challenge, parse_public_identity};
 use axum::{
     Json, Router,
     extract::{
@@ -12,27 +8,29 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{any, get},
 };
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::Deserialize;
 use serde_json::json;
-use state::{
-    AppState, Delivery, RateKind, ServerFrame, SessionChannel, StateError, Transition, random_token,
-};
 use std::{
+    collections::VecDeque,
     env,
     sync::Arc,
     time::{Duration, Instant},
 };
+use tacitus_backend::state::{
+    AppState, Delivery, PayloadKind, ServerFrame, SessionChannel, StateError,
+};
+use tacitus_protocol::{IdentityDocument, format_tacitus_id, verify_authentication};
 use tokio::{
     net::TcpListener,
-    sync::{RwLock, Semaphore, mpsc},
-    time::{interval, timeout},
+    sync::{RwLock, watch},
+    time::{sleep, timeout},
 };
 
 type SharedState = Arc<RwLock<AppState>>;
-
 const MAX_FRAME_BYTES: usize = 64 * 1024;
 const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
-static AUTH_SLOTS: Semaphore = Semaphore::const_new(4);
+const DISCONNECT_GRACE: Duration = Duration::from_secs(30);
 
 #[derive(Deserialize)]
 #[serde(tag = "type", deny_unknown_fields)]
@@ -48,34 +46,47 @@ enum ClientFrame {
     ContactAdd {
         v: u8,
         request_id: String,
-        target_fingerprint: String,
+        tacitus_id: String,
     },
     #[serde(rename = "contact.cancel")]
     ContactCancel {
         v: u8,
         request_id: String,
-        target_fingerprint: String,
+        tacitus_id: String,
     },
-    #[serde(rename = "contact.block")]
-    ContactBlock {
+    #[serde(rename = "contact.remove")]
+    ContactRemove {
         v: u8,
         request_id: String,
-        target_fingerprint: String,
+        tacitus_id: String,
     },
-    #[serde(rename = "contact.unblock")]
-    ContactUnblock {
+    #[serde(rename = "handshake.send")]
+    HandshakeSend {
         v: u8,
         request_id: String,
-        target_fingerprint: String,
+        to_id: String,
+        body: String,
     },
     #[serde(rename = "message.send")]
     MessageSend {
         v: u8,
         request_id: String,
-        to_fingerprint: String,
-        message_id: String,
-        ciphertext: String,
+        to_id: String,
+        body: String,
     },
+}
+
+impl ClientFrame {
+    fn request_id(&self) -> Option<&str> {
+        match self {
+            Self::AuthRespond { .. } => None,
+            Self::ContactAdd { request_id, .. }
+            | Self::ContactCancel { request_id, .. }
+            | Self::ContactRemove { request_id, .. }
+            | Self::HandshakeSend { request_id, .. }
+            | Self::MessageSend { request_id, .. } => Some(request_id),
+        }
+    }
 }
 
 #[tokio::main]
@@ -94,20 +105,314 @@ async fn main() {
 }
 
 async fn health() -> Json<serde_json::Value> {
-    Json(json!({ "status": "ok" }))
+    Json(json!({ "status": "ok", "protocol": 2 }))
 }
 
 async fn websocket(
     State(state): State<SharedState>,
     headers: HeaderMap,
-    ws: WebSocketUpgrade,
+    socket: WebSocketUpgrade,
 ) -> Response {
     if !valid_origin(&headers) {
         return StatusCode::FORBIDDEN.into_response();
     }
-    ws.max_frame_size(MAX_FRAME_BYTES)
+    socket
+        .max_frame_size(MAX_FRAME_BYTES)
         .max_message_size(MAX_FRAME_BYTES)
         .on_upgrade(move |socket| serve_socket(socket, state))
+}
+
+async fn serve_socket(mut socket: WebSocket, state: SharedState) {
+    let nonce: [u8; 32] = rand::random();
+    if send_frame(
+        &mut socket,
+        &ServerFrame::AuthChallenge {
+            v: 2,
+            nonce: URL_SAFE_NO_PAD.encode(nonce),
+        },
+    )
+    .await
+    .is_err()
+    {
+        return;
+    }
+    let authentication = timeout(Duration::from_secs(30), socket.recv()).await;
+    let Ok(Some(Ok(Message::Text(text)))) = authentication else {
+        let _ = send_error(&mut socket, None, StateError::AuthenticationFailed).await;
+        return;
+    };
+    let Ok(ClientFrame::AuthRespond {
+        v: 2,
+        nickname,
+        public_key,
+        signature,
+    }) = serde_json::from_str(text.as_str())
+    else {
+        let _ = send_error(&mut socket, None, StateError::AuthenticationFailed).await;
+        return;
+    };
+    let authenticated = (|| {
+        let public_key = URL_SAFE_NO_PAD
+            .decode(public_key)
+            .map_err(|_| StateError::AuthenticationFailed)?;
+        let signature = URL_SAFE_NO_PAD
+            .decode(signature)
+            .map_err(|_| StateError::AuthenticationFailed)?;
+        let identity = IdentityDocument::new(&nickname, public_key.clone())
+            .map_err(|_| StateError::AuthenticationFailed)?;
+        verify_authentication(&identity, &nonce, &signature)
+            .map_err(|_| StateError::AuthenticationFailed)?;
+        Ok::<_, StateError>((
+            identity.nickname().to_owned(),
+            format_tacitus_id(identity.id()),
+            public_key,
+        ))
+    })();
+    let Ok((nickname, tacitus_id, public_key)) = authenticated else {
+        let _ = send_error(&mut socket, None, StateError::AuthenticationFailed).await;
+        return;
+    };
+
+    let session_id = URL_SAFE_NO_PAD.encode::<[u8; 16]>(rand::random());
+    let (channel, mut outgoing, mut close) = SessionChannel::new(session_id.clone());
+    let registration =
+        state
+            .write()
+            .await
+            .register(&tacitus_id, &nickname, public_key, channel.clone());
+    let Ok(deliveries) = registration else {
+        let _ = send_error(&mut socket, None, registration.expect_err("checked error")).await;
+        return;
+    };
+    if channel
+        .send(ServerFrame::AuthReady {
+            v: 2,
+            nickname,
+            tacitus_id: tacitus_id.clone(),
+        })
+        .is_err()
+    {
+        return;
+    }
+    dispatch(deliveries);
+
+    let mut limits = Limits::default();
+    loop {
+        tokio::select! {
+            biased;
+            changed = close.changed() => {
+                if changed.is_ok() && *close.borrow() {
+                    let _ = timeout(WRITE_TIMEOUT, socket.send(Message::Close(None))).await;
+                }
+                break;
+            }
+            Some(frame) = outgoing.recv() => {
+                if send_cancellable(&mut socket, &frame, &mut close).await.is_err() { break }
+            }
+            incoming = socket.recv() => {
+                let Some(Ok(message)) = incoming else { break };
+                match message {
+                    Message::Text(text) => match handle_frame(&state, &session_id, text.as_str(), &mut limits).await {
+                        Ok(deliveries) => dispatch(deliveries),
+                        Err((request_id, reason)) => {
+                            if channel.send(ServerFrame::Error { v: 2, request_id, code: reason.code() }).is_err() { break }
+                        }
+                    },
+                    Message::Ping(bytes) => {
+                        if timeout(WRITE_TIMEOUT, socket.send(Message::Pong(bytes))).await.is_err() { break }
+                    }
+                    Message::Close(_) => break,
+                    Message::Binary(_) | Message::Pong(_) => {}
+                }
+            }
+        }
+    }
+    dispatch(state.write().await.unregister(&session_id));
+    tokio::spawn(async move {
+        sleep(DISCONNECT_GRACE).await;
+        dispatch(
+            state
+                .write()
+                .await
+                .expire_disconnect(&tacitus_id, &session_id),
+        );
+    });
+}
+
+async fn handle_frame(
+    state: &SharedState,
+    session_id: &str,
+    text: &str,
+    limits: &mut Limits,
+) -> Result<Vec<Delivery>, (Option<String>, StateError)> {
+    let frame: ClientFrame =
+        serde_json::from_str(text).map_err(|_| (None, StateError::InvalidRequest))?;
+    if frame
+        .request_id()
+        .is_none_or(|request_id| request_id.is_empty() || request_id.len() > 64)
+    {
+        return Err((None, StateError::InvalidRequest));
+    }
+    let now = Instant::now();
+    match frame {
+        ClientFrame::ContactAdd {
+            v: 2,
+            request_id,
+            tacitus_id,
+        } => {
+            limits
+                .allow_contact(now)
+                .map_err(|error| (Some(request_id.clone()), error))?;
+            state
+                .write()
+                .await
+                .add_contact(session_id, &request_id, &tacitus_id)
+                .map_err(|error| (Some(request_id), error))
+        }
+        ClientFrame::ContactCancel {
+            v: 2,
+            request_id,
+            tacitus_id,
+        } => {
+            limits
+                .allow_contact(now)
+                .map_err(|error| (Some(request_id.clone()), error))?;
+            state
+                .write()
+                .await
+                .cancel_contact(session_id, &request_id, &tacitus_id)
+                .map_err(|error| (Some(request_id), error))
+        }
+        ClientFrame::ContactRemove {
+            v: 2,
+            request_id,
+            tacitus_id,
+        } => {
+            limits
+                .allow_contact(now)
+                .map_err(|error| (Some(request_id.clone()), error))?;
+            state
+                .write()
+                .await
+                .remove_contact(session_id, &request_id, &tacitus_id)
+                .map_err(|error| (Some(request_id), error))
+        }
+        ClientFrame::HandshakeSend {
+            v: 2,
+            request_id,
+            to_id,
+            body,
+        } => {
+            limits
+                .allow_message(now)
+                .map_err(|error| (Some(request_id.clone()), error))?;
+            state
+                .read()
+                .await
+                .route(
+                    session_id,
+                    &request_id,
+                    &to_id,
+                    PayloadKind::Handshake,
+                    body,
+                )
+                .map_err(|error| (Some(request_id), error))
+        }
+        ClientFrame::MessageSend {
+            v: 2,
+            request_id,
+            to_id,
+            body,
+        } => {
+            limits
+                .allow_message(now)
+                .map_err(|error| (Some(request_id.clone()), error))?;
+            state
+                .read()
+                .await
+                .route(session_id, &request_id, &to_id, PayloadKind::Message, body)
+                .map_err(|error| (Some(request_id), error))
+        }
+        _ => Err((None, StateError::InvalidRequest)),
+    }
+}
+
+#[derive(Default)]
+struct Limits {
+    messages: VecDeque<Instant>,
+    contacts: VecDeque<Instant>,
+}
+
+impl Limits {
+    fn allow_message(&mut self, now: Instant) -> Result<(), StateError> {
+        allow(&mut self.messages, now, Duration::from_secs(10), 60)
+    }
+    fn allow_contact(&mut self, now: Instant) -> Result<(), StateError> {
+        allow(&mut self.contacts, now, Duration::from_secs(60), 30)
+    }
+}
+
+fn allow(
+    events: &mut VecDeque<Instant>,
+    now: Instant,
+    window: Duration,
+    maximum: usize,
+) -> Result<(), StateError> {
+    while events
+        .front()
+        .is_some_and(|event| now.duration_since(*event) >= window)
+    {
+        events.pop_front();
+    }
+    if events.len() >= maximum {
+        return Err(StateError::InvalidRequest);
+    }
+    events.push_back(now);
+    Ok(())
+}
+
+fn dispatch(deliveries: Vec<Delivery>) {
+    for delivery in deliveries {
+        let _ = delivery.send();
+    }
+}
+
+async fn send_frame(socket: &mut WebSocket, frame: &ServerFrame) -> Result<(), ()> {
+    let serialized = serde_json::to_string(frame).map_err(|_| ())?;
+    timeout(WRITE_TIMEOUT, socket.send(Message::Text(serialized.into())))
+        .await
+        .map_err(|_| ())?
+        .map_err(|_| ())
+}
+
+async fn send_cancellable(
+    socket: &mut WebSocket,
+    frame: &ServerFrame,
+    close: &mut watch::Receiver<bool>,
+) -> Result<(), ()> {
+    let serialized = serde_json::to_string(frame).map_err(|_| ())?;
+    tokio::select! {
+        _ = close.changed() => Err(()),
+        result = timeout(WRITE_TIMEOUT, socket.send(Message::Text(serialized.into()))) => {
+            result.map_err(|_| ())?.map_err(|_| ())
+        }
+    }
+}
+
+async fn send_error(
+    socket: &mut WebSocket,
+    request_id: Option<String>,
+    error: StateError,
+) -> Result<(), ()> {
+    send_frame(
+        socket,
+        &ServerFrame::Error {
+            v: 2,
+            request_id,
+            code: error.code(),
+        },
+    )
+    .await
 }
 
 fn valid_origin(headers: &HeaderMap) -> bool {
@@ -117,8 +422,12 @@ fn valid_origin(headers: &HeaderMap) -> bool {
     else {
         return false;
     };
-    if let Ok(public_origin) = env::var("PUBLIC_ORIGIN") {
-        return origin == public_origin.trim_end_matches('/');
+    if let Ok(public_origins) = env::var("PUBLIC_ORIGINS") {
+        return public_origins
+            .split(',')
+            .map(str::trim)
+            .map(|allowed| allowed.trim_end_matches('/'))
+            .any(|allowed| origin == allowed);
     }
     let Some(host) = headers
         .get(header::HOST)
@@ -135,458 +444,32 @@ fn valid_origin(headers: &HeaderMap) -> bool {
     origin == format!("{scheme}://{host}")
 }
 
-async fn serve_socket(mut socket: WebSocket, state: SharedState) {
-    let mut challenge = Challenge::new(Instant::now());
-    if send_frame(
-        &mut socket,
-        &ServerFrame::AuthChallenge {
-            v: 1,
-            nonce: challenge.nonce.clone(),
-        },
-    )
-    .await
-    .is_err()
-    {
-        return;
-    }
-
-    let auth = timeout(Duration::from_secs(30), socket.recv()).await;
-    let Ok(Some(Ok(Message::Text(text)))) = auth else {
-        let _ = send_error(&mut socket, None, "authentication_failed").await;
-        return;
-    };
-    let Ok(ClientFrame::AuthRespond {
-        v: 1,
-        nickname,
-        public_key,
-        signature,
-    }) = serde_json::from_str(text.as_str())
-    else {
-        let _ = send_error(&mut socket, None, "authentication_failed").await;
-        return;
-    };
-    let Ok(permit) = AUTH_SLOTS.acquire().await else {
-        return;
-    };
-    let authenticated = tokio::task::spawn_blocking(move || {
-        let _permit = permit;
-        let identity = parse_public_identity(&public_key).map_err(|_| ())?;
-        challenge
-            .verify(Instant::now(), &nickname, &signature, &identity.cert)
-            .map_err(|_| ())?;
-        Ok::<_, ()>((nickname, public_key, identity.fingerprint))
-    })
-    .await;
-    let Ok(Ok((nickname, public_key, fingerprint))) = authenticated else {
-        let _ = send_error(&mut socket, None, "authentication_failed").await;
-        return;
-    };
-
-    let session_id = random_token::<16>();
-    let (sender, mut receiver, mut close_receiver) = SessionChannel::new(session_id.clone());
-    let registration = {
-        state.write().await.register(
-            &nickname,
-            &fingerprint,
-            public_key,
-            session_id.clone(),
-            sender,
-        )
-    };
-    let registration = match registration {
-        Ok(registration) => registration,
-        Err(error) => {
-            let _ = send_error(&mut socket, None, error.code()).await;
-            return;
-        }
-    };
-    if send_frame(
-        &mut socket,
-        &ServerFrame::AuthReady {
-            v: 1,
-            nickname: registration.nickname,
-            fingerprint,
-        },
-    )
-    .await
-    .is_err()
-    {
-        cleanup(&state, &session_id).await;
-        return;
-    }
-    if dispatch_for(
-        &mut socket,
-        &session_id,
-        Transition {
-            deliveries: registration.deliveries,
-            log: None,
-        },
-    )
-    .await
-    .is_err()
-    {
-        cleanup(&state, &session_id).await;
-        return;
-    }
-
-    let mut heartbeat = interval(Duration::from_secs(30));
-    heartbeat.tick().await;
-    let mut last_pong = Instant::now();
-    let mut invalid_frames = 0_u8;
-    loop {
-        tokio::select! {
-            frame = receiver.recv() => match frame {
-                Some(frame) => {
-                    if send_frame(&mut socket, &frame).await.is_err() { break; }
-                }
-                None => {
-                    let _ = send_socket_message(&mut socket, Message::Close(None)).await;
-                    break;
-                }
-            },
-            _ = close_receiver.changed() => {
-                let _ = send_socket_message(&mut socket, Message::Close(None)).await;
-                break;
-            },
-            incoming = socket.recv() => match incoming {
-                Some(Ok(Message::Text(text))) => {
-                    match serde_json::from_str::<ClientFrame>(text.as_str()) {
-                        Ok(frame) => {
-                            if process_frame(&mut socket, &state, &session_id, frame).await {
-                                break;
-                            }
-                        }
-                        Err(_) => {
-                            invalid_frames = invalid_frames.saturating_add(1);
-                            let _ = send_error(&mut socket, None, "invalid_request").await;
-                            if invalid_frames >= 3 { break; }
-                        }
-                    }
-                }
-                Some(Ok(Message::Pong(_))) => last_pong = Instant::now(),
-                Some(Ok(Message::Ping(bytes))) => {
-                    if send_socket_message(&mut socket, Message::Pong(bytes)).await.is_err() { break; }
-                }
-                Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
-                Some(Ok(Message::Binary(_))) => {
-                    invalid_frames = invalid_frames.saturating_add(1);
-                    let _ = send_error(&mut socket, None, "invalid_request").await;
-                    if invalid_frames >= 3 { break; }
-                }
-            },
-            _ = heartbeat.tick() => {
-                if last_pong.elapsed() >= Duration::from_secs(60)
-                    || send_socket_message(&mut socket, Message::Ping(Vec::new().into())).await.is_err()
-                {
-                    break;
-                }
-            }
-        }
-    }
-    let transition = { state.write().await.disconnect(&session_id) };
-    dispatch(Transition {
-        deliveries: transition,
-        log: None,
-    });
-}
-
-async fn process_frame(
-    socket: &mut WebSocket,
-    state: &SharedState,
-    session_id: &str,
-    frame: ClientFrame,
-) -> bool {
-    match frame {
-        ClientFrame::AuthRespond { .. } => {
-            let _ = send_error(socket, None, "invalid_request").await;
-        }
-        ClientFrame::ContactAdd {
-            v,
-            request_id,
-            target_fingerprint,
-        } => {
-            return contact_action(
-                socket,
-                state,
-                session_id,
-                v,
-                request_id.clone(),
-                &target_fingerprint,
-                |state| state.add_contact(session_id, &target_fingerprint, request_id),
-            )
-            .await;
-        }
-        ClientFrame::ContactCancel {
-            v,
-            request_id,
-            target_fingerprint,
-        } => {
-            return contact_action(
-                socket,
-                state,
-                session_id,
-                v,
-                request_id,
-                &target_fingerprint,
-                |state| state.cancel_contact(session_id, &target_fingerprint),
-            )
-            .await;
-        }
-        ClientFrame::ContactBlock {
-            v,
-            request_id,
-            target_fingerprint,
-        } => {
-            return contact_action(
-                socket,
-                state,
-                session_id,
-                v,
-                request_id,
-                &target_fingerprint,
-                |state| state.block_contact(session_id, &target_fingerprint),
-            )
-            .await;
-        }
-        ClientFrame::ContactUnblock {
-            v,
-            request_id,
-            target_fingerprint,
-        } => {
-            return contact_action(
-                socket,
-                state,
-                session_id,
-                v,
-                request_id,
-                &target_fingerprint,
-                |state| state.unblock_contact(session_id, &target_fingerprint),
-            )
-            .await;
-        }
-        ClientFrame::MessageSend {
-            v,
-            request_id,
-            to_fingerprint,
-            message_id,
-            ciphertext,
-        } => {
-            if v != 1 || !valid_request_id(&request_id) || !valid_fingerprint(&to_fingerprint) {
-                let _ = send_error(socket, Some(request_id), "invalid_request").await;
-                return false;
-            }
-            let result = {
-                let mut state = state.write().await;
-                state
-                    .check_rate(session_id, RateKind::Message, Instant::now())
-                    .and_then(|()| {
-                        state.route_message(
-                            session_id,
-                            &to_fingerprint,
-                            message_id.clone(),
-                            ciphertext,
-                        )
-                    })
-            };
-            match result {
-                Ok(route) => match route.sender.try_send(route.frame) {
-                    Ok(()) => {
-                        let _ = send_frame(
-                            socket,
-                            &ServerFrame::MessageSent {
-                                v: 1,
-                                request_id,
-                                message_id,
-                            },
-                        )
-                        .await;
-                    }
-                    Err(mpsc::error::TrySendError::Full(_)) => {
-                        let _ = send_error(socket, Some(request_id), "server_overloaded").await;
-                    }
-                    Err(mpsc::error::TrySendError::Closed(_)) => {
-                        let _ = send_error(socket, Some(request_id), "contact_unavailable").await;
-                    }
-                },
-                Err(error) => {
-                    let close = matches!(error, StateError::RateLimited { close: true });
-                    let _ = send_error(socket, Some(request_id), error.code()).await;
-                    if close {
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-    false
-}
-
-async fn contact_action(
-    socket: &mut WebSocket,
-    shared: &SharedState,
-    session_id: &str,
-    version: u8,
-    request_id: String,
-    target_fingerprint: &str,
-    action: impl FnOnce(&mut AppState) -> Result<Transition, StateError>,
-) -> bool {
-    if version != 1 || !valid_request_id(&request_id) || !valid_fingerprint(target_fingerprint) {
-        let _ = send_error(socket, Some(request_id), "invalid_request").await;
-        return false;
-    }
-    let result = {
-        let mut state = shared.write().await;
-        state
-            .check_rate(session_id, RateKind::Contact, Instant::now())
-            .and_then(|()| action(&mut state))
-    };
-    match result {
-        Ok(transition) => {
-            if dispatch_for(socket, session_id, transition).await.is_err() {
-                return true;
-            }
-        }
-        Err(error) => {
-            let close = matches!(error, StateError::RateLimited { close: true });
-            let _ = send_error(socket, Some(request_id), error.code()).await;
-            return close;
-        }
-    }
-    false
-}
-
-fn dispatch(transition: Transition) {
-    for Delivery { sender, frame } in transition.deliveries {
-        deliver(sender, frame);
-    }
-    if let Some(line) = transition.log {
-        println!("{line}");
-    }
-}
-
-async fn dispatch_for(
-    socket: &mut WebSocket,
-    session_id: &str,
-    transition: Transition,
-) -> Result<(), ()> {
-    let mut socket_failed = false;
-    for Delivery { sender, frame } in transition.deliveries {
-        if sender.id() == session_id {
-            socket_failed |= send_frame(socket, &frame).await.is_err();
-        } else {
-            deliver(sender, frame);
-        }
-    }
-    if let Some(line) = transition.log {
-        println!("{line}");
-    }
-    if socket_failed { Err(()) } else { Ok(()) }
-}
-
-fn deliver(sender: SessionChannel, frame: ServerFrame) {
-    if matches!(
-        sender.try_send(frame),
-        Err(mpsc::error::TrySendError::Full(_))
-    ) {
-        sender.close();
-    }
-}
-
-async fn cleanup(state: &SharedState, session_id: &str) {
-    let deliveries = state.write().await.disconnect(session_id);
-    dispatch(Transition {
-        deliveries,
-        log: None,
-    });
-}
-
-async fn send_frame(socket: &mut WebSocket, frame: &ServerFrame) -> Result<(), ()> {
-    let text = serde_json::to_string(frame).map_err(|_| ())?;
-    send_socket_message(socket, Message::Text(text.into())).await
-}
-
-async fn send_socket_message(socket: &mut WebSocket, message: Message) -> Result<(), ()> {
-    timeout(WRITE_TIMEOUT, socket.send(message))
-        .await
-        .map_err(|_| ())?
-        .map_err(|_| ())
-}
-
-async fn send_error(
-    socket: &mut WebSocket,
-    request_id: Option<String>,
-    code: &'static str,
-) -> Result<(), ()> {
-    send_frame(
-        socket,
-        &ServerFrame::Error {
-            v: 1,
-            request_id,
-            code,
-        },
-    )
-    .await
-}
-
-fn valid_request_id(request_id: &str) -> bool {
-    !request_id.is_empty() && request_id.len() <= 64
-}
-
-fn valid_fingerprint(fingerprint: &str) -> bool {
-    matches!(fingerprint.len(), 40 | 64) && fingerprint.bytes().all(|byte| byte.is_ascii_hexdigit())
-}
-
 async fn shutdown_signal() {
-    let _ = tokio::signal::ctrl_c().await;
+    #[cfg(unix)]
+    {
+        let mut terminate =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                .expect("install SIGTERM handler");
+        tokio::select! { _ = tokio::signal::ctrl_c() => {}, _ = terminate.recv() => {} }
+    }
+    #[cfg(not(unix))]
+    tokio::signal::ctrl_c()
+        .await
+        .expect("install Ctrl-C handler");
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::HeaderValue;
-
-    #[test]
-    fn origin_must_match_host_and_forwarded_scheme() {
-        let mut headers = HeaderMap::new();
-        headers.insert(header::HOST, HeaderValue::from_static("chat.example.test"));
-        headers.insert(
-            header::ORIGIN,
-            HeaderValue::from_static("https://chat.example.test"),
-        );
-        headers.insert("x-forwarded-proto", HeaderValue::from_static("https"));
-        assert!(valid_origin(&headers));
-        headers.insert(
-            header::ORIGIN,
-            HeaderValue::from_static("https://evil.example"),
-        );
-        assert!(!valid_origin(&headers));
-    }
 
     #[tokio::test]
-    async fn health_has_expected_body() {
-        assert_eq!(health().await.0, json!({ "status": "ok" }));
-    }
-
-    #[test]
-    fn full_control_queue_closes_the_session_for_resync() {
-        let (sender, _receiver, close) = SessionChannel::new("session".into());
-        for _ in 0..64 {
-            sender
-                .try_send(ServerFrame::PresenceChanged {
-                    v: 1,
-                    fingerprint: "fingerprint".into(),
-                    online: true,
-                })
-                .unwrap();
-        }
-        deliver(
-            sender,
-            ServerFrame::PresenceChanged {
-                v: 1,
-                fingerprint: "fingerprint".into(),
-                online: false,
-            },
-        );
-        assert!(*close.borrow());
+    async fn v1_frames_are_rejected_without_compatibility_path() {
+        let state = Arc::new(RwLock::new(AppState::default()));
+        let mut limits = Limits::default();
+        let v1 = r#"{"v":1,"type":"contact.add","request_id":"r","tacitus_id":"00000-00000-00000-00000-000000"}"#;
+        assert!(matches!(
+            handle_frame(&state, "unused", v1, &mut limits).await,
+            Err((None, StateError::InvalidRequest))
+        ));
     }
 }

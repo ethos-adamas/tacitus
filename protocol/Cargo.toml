@@ -1,0 +1,25 @@
+[package]
+name = "tacitus-protocol"
+version = "1.0.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+aes-gcm-siv = "0.11"
+base64 = "0.22"
+getrandom = { version = "0.3", features = ["wasm_js"] }
+getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
+getrandom_04 = { package = "getrandom", version = "0.4", features = ["wasm_js"] }
+hkdf = "0.12"
+hmac = "0.12"
+p256 = { version = "0.14", features = ["ecdsa"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+wasm-bindgen = "0.2"
+x25519-dalek = { version = "3", features = ["static_secrets"] }
+
+[dev-dependencies]
+p256 = { version = "0.14", features = ["ecdsa", "getrandom"] }

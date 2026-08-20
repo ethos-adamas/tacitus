@@ -23,8 +23,8 @@ spec:
         - name: backend
           image: ghcr.io/ethos-adamas/tacitus-be:replace-me
           env:
-            - name: PUBLIC_ORIGIN
-              value: https://tacitus.ethos-adamas.it
+            - name: PUBLIC_ORIGINS
+              value: https://tacitus.ethos-adamas.it,http://tauri.localhost,tauri://localhost
           ports:
             - name: http
               containerPort: 3000

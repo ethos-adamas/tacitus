@@ -1,180 +1,57 @@
-export const NICKNAME_PATTERN = /^[a-z0-9_]{3,24}$/
 export const MAX_MESSAGE_LENGTH = 4_000
 
-export type ContactStatus = 'inactive' | 'pending' | 'active' | 'blocked'
-
-export type ContactKey = {
-  fingerprint: string
-  publicKey: string
-  userIds: string[]
-}
-
-export type MessageContent = {
-  v: 1
-  message_id: string
-  relationship_epoch: string
-  sequence: number
-  from_fingerprint: string
-  to_fingerprint: string
-  created_at: string
+export type Message = {
+  id: string
+  direction: 'incoming' | 'outgoing'
   text: string
+  createdAt: number
 }
-
-export type ConversationEntry =
-  | {
-      kind: 'message'
-      direction: 'incoming' | 'outgoing'
-      messageId: string
-      ciphertext: string
-      createdAt: string
-    }
-  | {
-      kind: 'fingerprint-changed'
-      from: string
-      to: string
-      createdAt: string
-    }
 
 export type Contact = {
-  id: string
+  tacitusId: string
   nickname?: string
-  currentFingerprint: string
-  keys: ContactKey[]
-  status: ContactStatus
+  pending: boolean
+  reactivationRequired: boolean
   online: boolean
-  blocked: boolean
+  secure: boolean
   unread: number
-  relationshipEpoch?: string
-  nextSequence: number
-  highestReceivedSequence: number
-  receivedMessageIds: string[]
-  conversation: ConversationEntry[]
+  draft: string
+  messages: Message[]
 }
 
-export const normalizeNickname = (nickname: string) =>
-  nickname.trim().toLowerCase()
+const CROCKFORD = /^[0-9A-HJKMNP-TV-Z]{26}$/
 
-export const abbreviateFingerprint = (fingerprint: string) =>
-  fingerprint.slice(0, 12).toUpperCase()
-
-export function validateNickname(nickname: string) {
-  if (!NICKNAME_PATTERN.test(normalizeNickname(nickname))) {
-    throw new Error('Usa 3–24 caratteri: lettere minuscole, numeri o underscore.')
+export function normalizeTacitusId(value: string) {
+  const raw = value.toUpperCase().replaceAll('-', '').replaceAll(' ', '')
+    .replaceAll('O', '0').replaceAll('I', '1').replaceAll('L', '1')
+  if (!CROCKFORD.test(raw) || Number.parseInt(raw[0], 32) > 7) {
+    throw new Error('Inserisci un Tacitus ID valido di 26 caratteri.')
   }
+  return `${raw.slice(0, 5)}-${raw.slice(5, 10)}-${raw.slice(10, 15)}-${raw.slice(15, 20)}-${raw.slice(20)}`
 }
 
-export function createContact(key: ContactKey): Contact {
+export function createContact(tacitusId: string): Contact {
   return {
-    id: crypto.randomUUID(),
-    currentFingerprint: key.fingerprint,
-    keys: [key],
-    status: 'inactive',
+    tacitusId: normalizeTacitusId(tacitusId),
+    pending: true,
+    reactivationRequired: false,
     online: false,
-    blocked: false,
+    secure: false,
     unread: 0,
-    nextSequence: 1,
-    highestReceivedSequence: 0,
-    receivedMessageIds: [],
-    conversation: [],
+    draft: '',
+    messages: [],
   }
 }
 
-export function activateRelation(
-  contact: Contact,
-  nickname: string,
-  relationshipEpoch: string,
-): Contact {
-  const isNewEpoch = contact.relationshipEpoch !== relationshipEpoch
-  return {
-    ...contact,
-    nickname,
-    status: contact.blocked ? 'blocked' : 'active',
-    relationshipEpoch,
-    nextSequence: isNewEpoch ? 1 : contact.nextSequence,
-    highestReceivedSequence: isNewEpoch ? 0 : contact.highestReceivedSequence,
-    receivedMessageIds: isNewEpoch ? [] : contact.receivedMessageIds,
-  }
+export function matchContact(contact: Contact, nickname: string, online: boolean): Contact {
+  return { ...contact, nickname, pending: false, reactivationRequired: false, online, secure: false }
 }
 
-export function changeContactKey(
-  contact: Contact,
-  key: ContactKey,
-  createdAt = new Date().toISOString(),
-): Contact {
-  if (key.fingerprint === contact.currentFingerprint) {
-    throw new Error('Questa è già la chiave corrente del contatto.')
-  }
-
-  return {
-    ...contact,
-    currentFingerprint: key.fingerprint,
-    keys: [key, ...contact.keys.filter(({ fingerprint }) => fingerprint !== key.fingerprint)],
-    status: contact.blocked ? 'blocked' : 'inactive',
-    online: false,
-    relationshipEpoch: undefined,
-    nextSequence: 1,
-    highestReceivedSequence: 0,
-    receivedMessageIds: [],
-    conversation: [
-      ...contact.conversation,
-      {
-        kind: 'fingerprint-changed',
-        from: contact.currentFingerprint,
-        to: key.fingerprint,
-        createdAt,
-      },
-    ],
-  }
+export function resetContactConnection(contact: Contact): Contact {
+  return { ...contact, pending: false, reactivationRequired: true, online: false, secure: false }
 }
 
-export function createMessageContent(
-  text: string,
-  fromFingerprint: string,
-  contact: Contact,
-): MessageContent {
-  if (!contact.relationshipEpoch || contact.status !== 'active' || !contact.online) {
-    throw new Error('Il contatto non è disponibile.')
-  }
-  if (!text.trim() || text.length > MAX_MESSAGE_LENGTH) {
-    throw new Error(`Il messaggio deve contenere da 1 a ${MAX_MESSAGE_LENGTH} caratteri.`)
-  }
-
-  return {
-    v: 1,
-    message_id: crypto.randomUUID(),
-    relationship_epoch: contact.relationshipEpoch,
-    sequence: contact.nextSequence,
-    from_fingerprint: fromFingerprint,
-    to_fingerprint: contact.currentFingerprint,
-    created_at: new Date().toISOString(),
-    text,
-  }
-}
-
-export function acceptIncomingMessage(
-  contact: Contact,
-  ownFingerprint: string,
-  content: MessageContent,
-): Contact {
-  if (
-    content.v !== 1 ||
-    content.from_fingerprint !== contact.currentFingerprint ||
-    content.to_fingerprint !== ownFingerprint ||
-    content.relationship_epoch !== contact.relationshipEpoch ||
-    !Number.isSafeInteger(content.sequence) ||
-    content.sequence <= contact.highestReceivedSequence ||
-    contact.receivedMessageIds.includes(content.message_id) ||
-    !content.message_id ||
-    !content.created_at ||
-    typeof content.text !== 'string' ||
-    content.text.length > MAX_MESSAGE_LENGTH
-  ) {
-    throw new Error('Messaggio rifiutato: firma o sequenza non valida.')
-  }
-
-  return {
-    ...contact,
-    highestReceivedSequence: content.sequence,
-    receivedMessageIds: [...contact.receivedMessageIds, content.message_id],
-  }
+export function addMessage(contact: Contact, message: Message): Contact {
+  if (contact.messages.some(({ id }) => id === message.id)) return contact
+  return { ...contact, messages: [...contact.messages, message] }
 }
