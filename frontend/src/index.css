@@ -70,9 +70,20 @@ aside { border-right: 1px solid var(--line); background: var(--surface-soft); }
 .message.outgoing { align-self: flex-end; border-color: var(--line); border-radius: 12px 12px 3px 12px; background: var(--pale); }
 .message p { margin: 0; white-space: pre-wrap; line-height: 1.45; }
 .message time { display: block; margin-top: .25rem; color: var(--muted); font-size: .65rem; text-align: right; }
-.composer { position: relative; display: grid; grid-template-columns: 1fr auto; align-items: end; gap: .6rem; padding: .8rem 1rem; border-top: 1px solid var(--line); }
+.composer { position: relative; z-index: 1; display: grid; grid-template-columns: auto 1fr auto; align-items: end; gap: .6rem; padding: .8rem 1rem; border-top: 1px solid var(--line); }
 .composer textarea { min-height: 2.7rem; max-height: 9rem; resize: vertical; padding-right: 4.2rem; }
 .composer small { position: absolute; right: 4.8rem; bottom: 1.1rem; color: var(--muted); font-size: .62rem; }
+.emoji-toggle { width: 2.7rem; height: 2.7rem; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--input); font-size: 1.25rem; }
+.emoji-picker-panel, .emoji-suggestions { position: absolute; z-index: 2; bottom: calc(100% + .4rem); left: 1rem; width: min(360px, calc(100vw - 2rem)); overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--card-shadow); }
+.emoji-picker-panel { height: 320px; }
+.emoji-picker-panel emoji-picker { width: 100%; height: 100%; --border-color: var(--line); --border-radius: 12px; --indicator-color: var(--green); }
+.emoji-suggestions { display: grid; padding: .35rem; }
+.emoji-suggestions button { display: grid; grid-template-columns: 2rem 1fr; align-items: center; gap: .55rem; padding: .45rem .55rem; border: 0; border-radius: 7px; color: inherit; background: transparent; text-align: left; }
+.emoji-suggestions button:hover, .emoji-suggestions button.selected { background: var(--pale); }
+.emoji-suggestions button > span:first-child { font-size: 1.35rem; text-align: center; }
+.emoji-suggestions button > span:last-child { min-width: 0; display: grid; gap: .1rem; }
+.emoji-suggestions strong { overflow: hidden; text-overflow: ellipsis; font-size: .78rem; }
+.emoji-suggestions small { position: static; overflow: hidden; color: var(--muted); font-size: .68rem; text-overflow: ellipsis; white-space: nowrap; }
 .send { width: 2.7rem; height: 2.7rem; border: 0; border-radius: 50%; color: var(--on-green); background: var(--green); font-size: 1.3rem; }
 dialog { width: min(500px, calc(100% - 2rem)); padding: 0; border: 1px solid var(--line); border-radius: 15px; color: inherit; background: var(--surface); box-shadow: var(--card-shadow); }
 dialog::backdrop { background: var(--backdrop); backdrop-filter: blur(3px); }

@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { PeerSession } from './generated/tacitus_protocol'
 import { isTauri } from '@tauri-apps/api/core'
+import EmojiComposer from './EmojiComposer'
 import {
   MAX_MESSAGE_LENGTH,
   addMessage,
@@ -311,13 +312,6 @@ export default function App() {
     }))
   }
 
-  function composerKey(event: KeyboardEvent<HTMLTextAreaElement>, contact: Contact) {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault()
-      sendMessage(contact)
-    }
-  }
-
   async function shareIdentity() {
     if (!identity) return
     try {
@@ -533,15 +527,10 @@ export default function App() {
               </article>)}
               <div ref={messagesEnd} />
             </div>
-            <div className="composer">
-              <textarea aria-label="Messaggio" value={active.draft} maxLength={MAX_MESSAGE_LENGTH}
-                placeholder={active.secure ? 'Scrivi un messaggio' : 'Il Contatto deve essere online'}
-                disabled={!active.secure} onChange={({ target }) => updateDraft(active, target.value)}
-                onKeyDown={(event) => composerKey(event, active)} />
-              <small>{active.draft.length}/{MAX_MESSAGE_LENGTH}</small>
-              <button className="send" aria-label="Invia" disabled={!active.secure || !active.draft.trim()}
-                onClick={() => sendMessage(active)}>↑</button>
-            </div>
+            <EmojiComposer key={active.tacitusId} value={active.draft} maxLength={MAX_MESSAGE_LENGTH}
+              placeholder={active.secure ? 'Scrivi un messaggio' : 'Il Contatto deve essere online'}
+              disabled={!active.secure} theme={theme}
+              onChange={(draft) => updateDraft(active, draft)} onSend={() => sendMessage(active)} />
           </>}
         </section>
       </section>
