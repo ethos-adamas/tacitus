@@ -6,6 +6,19 @@ Il tema segue il sistema finché non viene selezionato manualmente. Le notifiche
 
 Il protocollo wire e crittografico completo è documentato nel [`README` principale](../README.md#protocollo-tacitus-v2).
 
+## Struttura
+
+Il frontend è organizzato per responsabilità della Messaggistica privata:
+
+- `src/messaging/`: modello, Redux Toolkit slice e hook di coordinamento;
+- `src/relay/`: Connessione relay, autenticazione e protocollo wire;
+- `src/secure-session/`: lifecycle del core crittografico WASM;
+- `src/identity/`: interfaccia del Provider di Identità e adapter WebCrypto/Tauri;
+- `src/ui/`: UI presentazionale, compositore ed Emoji;
+- `src/storage.ts`: persistenza cifrata dell'Identità e delle Conversazioni.
+
+Redux contiene soltanto stato serializzabile. Chiavi, `WebSocket`, timer e `PeerSession` restano nei rispettivi moduli. Le transizioni dello slice e i selector costituiscono il seam principale dei test del modello client.
+
 ## Web
 
 ```bash
@@ -43,7 +56,8 @@ Android richiede API 23 o successiva; StrongBox viene usata da API 28 quando dis
 npm test
 npm run typecheck
 npm run lint
+npm run format:check
 npm run build
 ```
 
-I vettori di interoperabilità handshake/ratchet sono testati nativamente in `protocol/tests/protocol.rs`; i test client coprono modello della Conversazione, preferenze del dispositivo e cifratura dello snapshot locale.
+I vettori di interoperabilità handshake/ratchet sono testati nativamente in `protocol/tests/protocol.rs`; i test client coprono transizioni Redux della Conversazione, preferenze del dispositivo, Emoji e cifratura dello snapshot locale.

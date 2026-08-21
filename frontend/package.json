@@ -8,6 +8,8 @@
     "dev": "vite",
     "protocol:build": "wasm-pack build ../protocol --target web --out-dir ../frontend/src/generated --release",
     "build": "npm run protocol:build && tsc -b && vite build",
+    "format": "prettier --write .oxlintrc.json .prettierrc.json package.json tsconfig*.json vite.config.ts index.html src",
+    "format:check": "prettier --check .oxlintrc.json .prettierrc.json package.json tsconfig*.json vite.config.ts index.html src",
     "lint": "oxlint",
     "test": "vitest run",
     "typecheck": "npm run protocol:build && tsc -b --pretty false",
@@ -15,12 +17,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@reduxjs/toolkit": "^2.12.0",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-notification": "^2.3.3",
     "emoji-picker-element": "^1.29.1",
     "emoji-picker-element-data": "^1.8.0",
     "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react-dom": "^19.2.7",
+    "react-redux": "^9.3.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.4",
@@ -29,6 +33,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
+    "prettier": "^3.9.6",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
     "vitest": "^4.1.11"
