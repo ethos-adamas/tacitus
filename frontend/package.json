@@ -1,17 +1,18 @@
 {
   "name": "tacitus-frontend",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.1",
   "type": "module",
   "scripts": {
     "predev": "npm run protocol:build",
     "dev": "vite",
     "protocol:build": "wasm-pack build ../protocol --target web --out-dir ../frontend/src/generated --release",
     "build": "npm run protocol:build && tsc -b && vite build",
-    "format": "prettier --write .oxlintrc.json .prettierrc.json package.json tsconfig*.json vite.config.ts index.html src",
-    "format:check": "prettier --check .oxlintrc.json .prettierrc.json package.json tsconfig*.json vite.config.ts index.html src",
+    "format": "prettier --write .oxlintrc.json .prettierrc.json package.json tsconfig*.json vite.config.ts playwright.config.ts index.html src e2e",
+    "format:check": "prettier --check .oxlintrc.json .prettierrc.json package.json tsconfig*.json vite.config.ts playwright.config.ts index.html src e2e",
     "lint": "oxlint",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "typecheck": "npm run protocol:build && tsc -b --pretty false",
     "tauri": "tauri",
     "preview": "vite preview"
@@ -27,11 +28,14 @@
     "react-redux": "^9.3.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@tauri-apps/cli": "^2.11.4",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "jsdom": "^30.0.1",
     "oxlint": "^1.71.0",
     "prettier": "^3.9.6",
     "typescript": "~6.0.2",

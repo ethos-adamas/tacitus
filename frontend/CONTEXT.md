@@ -28,6 +28,10 @@ _Avoid_: Richiesta di amicizia, invito
 Il consenso reciproco corrente tra due Identità, valido per una specifica coppia di Tacitus ID.
 _Avoid_: Amicizia, connessione
 
+**Presenza del Contatto**:
+Lo stato volatile online o offline osservato dal frontend per un Contatto, distinto sia dalla Relazione sia dalla Sessione sicura.
+_Avoid_: Stato della Relazione, connessione del Contatto
+
 **Sessione sicura**:
 Lo stato crittografico volatile stabilito da due Identità per proteggere i Messaggi cifrati di una Relazione; può cambiare senza creare una nuova Conversazione.
 _Avoid_: Relazione, Conversazione

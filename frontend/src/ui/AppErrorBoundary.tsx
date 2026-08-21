@@ -16,6 +16,8 @@ class AppErrorBoundary extends Component<
 
   static getDerivedStateFromError = () => ({ failed: true });
 
+  reload = () => location.reload();
+
   render = () => {
     if (this.state.failed) {
       return (
@@ -26,7 +28,7 @@ class AppErrorBoundary extends Component<
             <p>
               Ricarica l’applicazione. I dati locali non verranno cancellati.
             </p>
-            <button className="primary" onClick={() => location.reload()}>
+            <button className="primary" onClick={this.reload}>
               Ricarica
             </button>
           </section>

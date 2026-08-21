@@ -8,14 +8,14 @@ Il protocollo wire e crittografico completo è documentato nel [`README` princip
 
 ## Struttura
 
-Il frontend è organizzato per responsabilità della Messaggistica privata:
+Il frontend è organizzato per layer e responsabilità della Messaggistica privata:
 
-- `src/messaging/`: modello, Redux Toolkit slice e hook di coordinamento;
-- `src/relay/`: Connessione relay, autenticazione e protocollo wire;
-- `src/secure-session/`: lifecycle del core crittografico WASM;
-- `src/identity/`: interfaccia del Provider di Identità e adapter WebCrypto/Tauri;
-- `src/ui/`: UI presentazionale, compositore ed Emoji;
-- `src/storage.ts`: persistenza cifrata dell'Identità e delle Conversazioni.
+- `src/domain/`: linguaggio e invarianti di Identità, Relazioni, Conversazioni e Messaggi;
+- `src/application/store/`: stato Redux normalizzato e selector derivati;
+- `src/application/hooks/`: capability usate dai componenti e lifecycle React;
+- `src/application/listeners/`: effetti di Sessioni sicure, Messaggi, notifiche e persistenza;
+- `src/infrastructure/`: adapter per Relay, Provider di Identità, WASM, IndexedDB e piattaforma;
+- `src/ui/`: componenti che possiedono HTML e stato strettamente visuale.
 
 Redux contiene soltanto stato serializzabile. Chiavi, `WebSocket`, timer e `PeerSession` restano nei rispettivi moduli. Le transizioni dello slice e i selector costituiscono il seam principale dei test del modello client.
 
@@ -60,4 +60,4 @@ npm run format:check
 npm run build
 ```
 
-I vettori di interoperabilità handshake/ratchet sono testati nativamente in `protocol/tests/protocol.rs`; i test client coprono transizioni Redux della Conversazione, preferenze del dispositivo, Emoji e cifratura dello snapshot locale.
+I vettori di interoperabilità handshake/ratchet sono testati nativamente in `protocol/tests/protocol.rs`. Vitest copre dominio, reducer, listener, adapter e UI; Playwright esercita gli use case completi contro il Relay locale su Chromium desktop e viewport mobile.

@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Tacitus",
-  "version": "1.0.0",
+  "version": "1.1.1",
   "identifier": "it.ethosadamas.tacitus",
   "build": {
     "frontendDist": "../dist",

@@ -102,7 +102,7 @@ La Conversazione è separata dalla Sessione. Il client conserva testo e bozze in
 - Android: AES-256-GCM con chiave Android Keystore/StrongBox;
 - iOS: AES-256-GCM con chiave `ThisDeviceOnly` in Keychain.
 
-`Cancella dati` elimina Identità, chiavi, Contatti e Conversazioni. Tema e preferenza notifiche appartengono al dispositivo e restano. Non esistono backup, recovery, sincronizzazione o multi-device.
+`Cancella dati` elimina Identità, chiavi, Contatti, Conversazioni e preferenze del dispositivo. Non esistono backup, recovery, sincronizzazione o multi-device.
 
 Il client segue inizialmente il tema del sistema e conserva un'eventuale scelta chiaro/scuro. Le notifiche sono disattivate di default e richiedono un consenso esplicito. Quando Tacitus non è in primo piano, ogni nuovo Messaggio produce una notifica generica senza Contatto né anteprima; Web e app mobile non ricevono notifiche push quando vengono sospesi o chiusi.
 

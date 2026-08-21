@@ -11,6 +11,8 @@ node_modules
 package-lock.json
 dist
 dist-ssr
+playwright-report
+test-results
 *.local
 
 # Editor directories and files

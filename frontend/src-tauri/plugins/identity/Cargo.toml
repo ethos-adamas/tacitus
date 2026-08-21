@@ -1,6 +1,6 @@
 [package]
 name = "tauri-plugin-identity"
-version = "1.0.0"
+version = "1.1.1"
 authors = [ "ethos-adamas" ]
 description = "Hardware-backed Tacitus identity and device storage"
 edition = "2024"
