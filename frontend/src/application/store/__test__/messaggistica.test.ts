@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  contattoBloccato,
   contattoAssociato,
   contattoRimosso,
   intentoDiContattoAnnullato,
@@ -155,5 +156,27 @@ describe('Messaggistica privata', () => {
 
     // Then
     expect(stato(store).conversazioni.idConversazioneAttiva).toBeUndefined();
+  });
+
+  it('sposta un Contatto tra le Identità bloccate e rimuove la Conversazione', () => {
+    // Given
+    const store = createTestStore();
+    store.dispatch(
+      contattoAssociato({
+        tacitusId: ALICE_ID,
+        nickname: 'alice',
+        online: true,
+      }),
+    );
+
+    // When
+    store.dispatch(contattoBloccato(ALICE_ID));
+
+    // Then
+    expect(stato(store).relazioni.blocchi[ALICE_ID]).toEqual({
+      tacitusId: ALICE_ID,
+    });
+    expect(stato(store).relazioni.contatti[ALICE_ID]).toBeUndefined();
+    expect(selectConversazione(stato(store), ALICE_ID)).toBeUndefined();
   });
 });

@@ -6,6 +6,7 @@ import {
 import type { TacitusId } from '../../domain/tacitusId';
 import {
   contattoAssociato,
+  contattoBloccato,
   contattoRimosso,
   messaggioInviato,
   messaggioRicevuto,
@@ -49,6 +50,12 @@ const conversazioniSlice = createSlice({
         );
       })
       .addCase(contattoRimosso, (state, { payload }) => {
+        delete state.perContatto[payload];
+        if (state.idConversazioneAttiva === payload) {
+          state.idConversazioneAttiva = undefined;
+        }
+      })
+      .addCase(contattoBloccato, (state, { payload }) => {
         delete state.perContatto[payload];
         if (state.idConversazioneAttiva === payload) {
           state.idConversazioneAttiva = undefined;

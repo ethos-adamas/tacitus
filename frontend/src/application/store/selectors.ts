@@ -6,6 +6,11 @@ import type { RootState } from './store';
 export const selectConversazione = (state: RootState, tacitusId: TacitusId) =>
   state.conversazioni.perContatto[tacitusId];
 
+export const selectIdentitaBloccate = createSelector(
+  [(state: RootState) => state.relazioni.blocchi],
+  blocchi => Object.values(blocchi),
+);
+
 const statoContatto = (
   relazioni: RootState['relazioni'],
   presenzeContatti: RootState['presenzeContatti'],

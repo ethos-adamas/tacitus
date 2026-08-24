@@ -21,8 +21,12 @@ La volontà unilaterale e temporanea di stabilire una Relazione con un Contatto.
 _Avoid_: Richiesta di amicizia, invito
 
 **Relazione**:
-Il consenso reciproco tra due Identità, valido per una specifica coppia di Tacitus ID fino a rimozione o riavvio.
+Il consenso reciproco tra due Identità contemporaneamente online. Una disconnessione conserva la Relazione per 30 secondi; alla scadenza rimane soltanto l’Intento dell’Identità ancora online. Un riavvio elimina lo stato volatile.
 _Avoid_: Amicizia, connessione
+
+**Blocco**:
+La decisione unilaterale persistita sul dispositivo di impedire Intenti, Relazioni e Messaggi cifrati con un’altra Identità. Il dispositivo sincronizza i Blocchi prima che la Sessione diventi attiva.
+_Avoid_: Ban, blacklist
 
 **Messaggio cifrato**:
 Il ciphertext end-to-end opaco che il backend instrada senza decifrarlo.

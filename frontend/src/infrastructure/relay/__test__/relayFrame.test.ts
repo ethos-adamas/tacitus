@@ -5,7 +5,7 @@ describe('frame del Relay', () => {
   it('converte un frame wire valido in un evento tipizzato', () => {
     // Given
     const frame = JSON.stringify({
-      v: 2,
+      v: 3,
       type: 'contact.matched',
       tacitus_id: '2G2DX-6P175-0PJ6E-Q37T0-Q94YJC',
       nickname: 'alice',
@@ -27,7 +27,7 @@ describe('frame del Relay', () => {
   it('rifiuta il frame al trust boundary quando manca un campo richiesto', () => {
     // Given
     const frame = JSON.stringify({
-      v: 2,
+      v: 3,
       type: 'message.received',
       from_id: '2G2DX-6P175-0PJ6E-Q37T0-Q94YJC',
     });
@@ -41,7 +41,7 @@ describe('frame del Relay', () => {
 
   it('valida anche i campi dei frame gestiti internamente dal Relay', () => {
     // Given
-    const frame = JSON.stringify({ v: 2, type: 'auth.ready' });
+    const frame = JSON.stringify({ v: 3, type: 'auth.ready' });
 
     // When
     const parse = () => parseRelayFrame(frame);

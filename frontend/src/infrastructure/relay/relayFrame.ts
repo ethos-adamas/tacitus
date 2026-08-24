@@ -61,7 +61,7 @@ const tacitusIdOf = (
 ): TacitusId => parseTacitusId(stringOf(record, field));
 
 const parseRecord = (record: Record<string, unknown>): RelayFrame => {
-  if (record.v !== 2) throw invalidFrame();
+  if (record.v !== 3) throw invalidFrame();
   switch (stringOf(record, 'type')) {
     case 'auth.challenge':
       return {
@@ -80,7 +80,15 @@ const parseRecord = (record: Record<string, unknown>): RelayFrame => {
     }
     case 'handshake.sent':
     case 'message.sent':
+    case 'contact.blocked':
+    case 'contact.unblocked':
       stringOf(record, 'request_id');
+      if (
+        record.type === 'contact.blocked' ||
+        record.type === 'contact.unblocked'
+      ) {
+        tacitusIdOf(record, 'tacitus_id');
+      }
       return { tipo: 'conferma' };
     case 'contact.pending':
       optionalStringOf(record, 'request_id');

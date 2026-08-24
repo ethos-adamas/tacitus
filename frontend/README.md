@@ -4,7 +4,7 @@ La stessa SPA React usa il core Rust `tacitus-protocol` compilato in WASM su Web
 
 Il tema segue il sistema finché non viene selezionato manualmente. Le notifiche sono opt-in: il browser usa la Notification API e Android/iOS il plugin ufficiale Tauri. Sono locali e best-effort, quindi non arrivano quando tab o app sono sospesi o chiusi.
 
-Il protocollo wire e crittografico completo è documentato nel [`README` principale](../README.md#protocollo-tacitus-v2).
+Il protocollo wire e crittografico completo è documentato nel [`README` principale](../README.md#protocollo-wire-v3).
 
 ## Struttura
 

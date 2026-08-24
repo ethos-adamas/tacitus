@@ -4,6 +4,7 @@ import type { RelazioniState } from '../../application/store/relazioniSlice';
 import type { Conversazione } from '../../domain/conversazioni';
 import type { Messaggio } from '../../domain/messaggi';
 import type {
+  Blocco,
   Contatto,
   IntentoDiContatto,
   Relazione,
@@ -141,6 +142,15 @@ export const parsePersistedState = (value: unknown): PersistedState => {
       ),
     },
     relazioni: {
+      blocchi: entriesByTacitusId<Blocco>(
+        relazioni.blocchi ?? {},
+        (item, tacitusId) => {
+          if (parseTacitusId(string(item.tacitusId)) !== tacitusId) {
+            return invalidData();
+          }
+          return { tacitusId };
+        },
+      ),
       intenti: entriesByTacitusId<IntentoDiContatto>(
         relazioni.intenti,
         (item, tacitusId) => {

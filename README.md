@@ -2,7 +2,7 @@
 
 Tacitus è una chat testuale effimera end-to-end encrypted per Web, Android e iOS. Non ha account, directory, database o messaggi offline: due Identità devono essere online e approvare reciprocamente il proprio Tacitus ID.
 
-Questa è la versione 2 del protocollo. Sostituisce integralmente la V1 OpenPGP: frame, chiavi e dati V1 non sono accettati né migrati.
+Tacitus usa la versione 2 del protocollo crittografico e la versione 3 del protocollo wire. Il wire V3 sostituisce integralmente V1 e V2: i vecchi frame non sono accettati né migrati.
 
 ## Componenti
 
@@ -14,7 +14,7 @@ Questa è la versione 2 del protocollo. Sostituisce integralmente la V1 OpenPGP:
 
 In produzione l'Ingress usa un solo origin: `/` serve il client e `/ws` il relay.
 
-## Protocollo Tacitus V2
+## Protocollo crittografico Tacitus V2
 
 ### Identità e Tacitus ID
 
@@ -51,6 +51,8 @@ La firma wire è `r || s` a 64 byte, codificata Base64URL. Una nuova Sessione au
 ### Consenso e handshake
 
 Una Relazione nasce soltanto quando entrambi gli Intenti di contatto sono presenti e le due Identità sono online. La rimozione cancella la Relazione; per ricrearla servono due nuovi Intenti. Una riconnessione conserva la Conversazione locale ma crea sempre una nuova Sessione crittografica.
+
+Un Blocco è unilaterale: elimina Relazione e Intenti reciproci e impedisce nuovi Intenti, handshake e Messaggi cifrati tra le due Identità. Lo sblocco non ricrea alcuna Relazione. I Blocchi sono persistiti nello snapshot cifrato del dispositivo e sincronizzati col relay prima che la Sessione diventi online; il relay non li conserva dopo il riavvio.
 
 Alla disconnessione il relay concede 30 secondi per rientrare nella stessa Relazione. Scaduto il termine, l'Identità rimasta online conserva il proprio Intento e quella che ritorna deve premere `Riattiva`; non deve farlo anche il Contatto rimasto online. Se entrambe si disconnettono, nessun Intento sopravvive. Il riavvio del backend ha lo stesso effetto perché lo stato è volatile.
 
@@ -106,13 +108,16 @@ La Conversazione è separata dalla Sessione. Il client conserva testo e bozze in
 
 Il client segue inizialmente il tema del sistema e conserva un'eventuale scelta chiaro/scuro. Le notifiche sono disattivate di default e richiedono un consenso esplicito. Quando Tacitus non è in primo piano, ogni nuovo Messaggio produce una notifica generica senza Contatto né anteprima; Web e app mobile non ricevono notifiche push quando vengono sospesi o chiusi.
 
-### Frame WebSocket
+## Protocollo wire V3
 
-I frame sono JSON V2; ciphertext e campi binari usano Base64URL. Il relay accetta soltanto:
+I frame sono JSON V3; ciphertext e campi binari usano Base64URL. Dopo `auth.respond`, il client deve inviare `contact.blocks.sync`; soltanto allora riceve `auth.ready` e diventa online.
+
+Il relay accetta soltanto:
 
 ```text
 auth.respond
-contact.add | contact.cancel | contact.remove
+contact.blocks.sync
+contact.add | contact.cancel | contact.remove | contact.block | contact.unblock
 handshake.send
 message.send
 ```
@@ -122,6 +127,7 @@ e produce:
 ```text
 auth.challenge | auth.ready
 contact.pending | contact.matched | contact.state | contact.removed
+contact.blocked | contact.unblocked
 presence.changed
 handshake.sent | handshake.received
 message.sent | message.received
@@ -129,6 +135,8 @@ error
 ```
 
 I body di handshake e messaggio sono opachi per il backend.
+
+`message.sent` e `handshake.sent` attestano soltanto che il relay ha inserito il payload nella mailbox della Sessione attiva del destinatario. Non attestano ricezione sul dispositivo, decifratura o lettura. Una mailbox destinataria bloccata causa `contact_unavailable`; la saturazione della mailbox centrale causa `server_busy` senza disconnettere il mittente.
 
 ## Sviluppo
 

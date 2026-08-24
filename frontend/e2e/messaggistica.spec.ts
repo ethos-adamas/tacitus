@@ -150,6 +150,38 @@ test.describe('use case della Messaggistica privata', () => {
     await closePersonas(alice, bob);
   });
 
+  test('un Blocco impedisce la Relazione finché non viene rimosso', async ({
+    browser,
+  }) => {
+    // Given
+    const alice = await createPersona(browser, 'alice_block');
+    const bob = await createPersona(browser, 'bob_block');
+    await matchContacts(alice, bob);
+    await alice.page.getByRole('button', { name: /bob_block/ }).click();
+    alice.page.once('dialog', dialog => dialog.accept());
+
+    // When
+    await alice.page.getByRole('button', { name: 'Blocca' }).click();
+
+    // Then
+    await expect(alice.page.getByText('Identità bloccate')).toBeVisible();
+    await expect(bob.page.getByText('Riattivazione necessaria')).toBeVisible();
+
+    // When
+    await alice.page.getByRole('button', { name: 'Sblocca' }).click();
+    await addContact(alice.page, bob.tacitusId);
+    await bob.page.getByRole('button', { name: /alice_block/ }).click();
+    await bob.page
+      .getByRole('button', { name: 'Riattiva', exact: true })
+      .click();
+
+    // Then
+    await expect(alice.page.getByText('Sessione sicura')).toBeVisible({
+      timeout: 15_000,
+    });
+    await closePersonas(alice, bob);
+  });
+
   test('il tema segue il sistema e può essere cambiato', async ({
     browser,
   }) => {

@@ -63,11 +63,19 @@ describe('Connessione Relay', () => {
     });
 
     // When
-    relay.connect(identity);
+    relay.connect(identity, []);
     const socket = FakeWebSocket.instances[0];
     socket.onmessage?.({
       data: JSON.stringify({
-        v: 2,
+        v: 3,
+        type: 'auth.challenge',
+        nonce: 'challenge',
+      }),
+    });
+    await flushEvents();
+    socket.onmessage?.({
+      data: JSON.stringify({
+        v: 3,
         type: 'auth.ready',
         nickname: identity.nickname,
         tacitus_id: identity.tacitusId,
@@ -75,7 +83,7 @@ describe('Connessione Relay', () => {
     });
     socket.onmessage?.({
       data: JSON.stringify({
-        v: 2,
+        v: 3,
         type: 'contact.pending',
         tacitus_id: identity.tacitusId,
       }),
@@ -89,8 +97,13 @@ describe('Connessione Relay', () => {
     expect(frames).toEqual([
       { tipo: 'intento-confermato', tacitusId: identity.tacitusId },
     ]);
-    expect(JSON.parse(socket.sent[0])).toMatchObject({
-      v: 2,
+    expect(socket.sent.map(value => JSON.parse(value).type)).toEqual([
+      'auth.respond',
+      'contact.blocks.sync',
+      'contact.add',
+    ]);
+    expect(JSON.parse(socket.sent[2])).toMatchObject({
+      v: 3,
       type: 'contact.add',
       tacitus_id: identity.tacitusId,
     });

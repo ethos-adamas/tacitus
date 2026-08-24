@@ -2,7 +2,10 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Provider } from 'react-redux';
 import { createTestStore } from '../../../application/store/store';
-import { intentoDiContattoCreato } from '../../../application/store/eventi';
+import {
+  contattoBloccato,
+  intentoDiContattoCreato,
+} from '../../../application/store/eventi';
 import { parseTacitusId } from '../../../domain/tacitusId';
 import ConversationList from '../ConversationList';
 
@@ -26,5 +29,24 @@ describe('elenco delle Conversazioni', () => {
     // Then
     expect(screen.getByText('Intento di contatto')).toBeDefined();
     expect(screen.queryByText('La Conversazione è vuota.')).toBeNull();
+  });
+
+  it('mostra le Identità bloccate in una sezione dedicata', () => {
+    // Given
+    const store = createTestStore();
+    store.dispatch(
+      contattoBloccato(parseTacitusId('2G2DX-6P175-0PJ6E-Q37T0-Q94YJC')),
+    );
+
+    // When
+    render(
+      <Provider store={store}>
+        <ConversationList />
+      </Provider>,
+    );
+
+    // Then
+    expect(screen.getByText('Identità bloccate')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Sblocca' })).toBeDefined();
   });
 });

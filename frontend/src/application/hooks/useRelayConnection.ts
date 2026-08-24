@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import type { TacitusId } from '../../domain/tacitusId';
 import {
   contattoAssociato,
   contattoRimosso,
@@ -23,9 +24,18 @@ import {
 export const useRelayConnection = (): void => {
   const dispatch = useDispatch();
   const identitaState = useSelector(state => state.identitaLocale);
+  const blocchi = useSelector(state => state.relazioni.blocchi);
+  const blocchiCorrenti = useRef(blocchi);
+
+  useEffect(() => {
+    blocchiCorrenti.current = blocchi;
+  }, [blocchi]);
 
   useEffect(() => {
     if (identitaState.stato !== 'pronta') return;
+    const tacitusIdBloccati = Object.keys(
+      blocchiCorrenti.current,
+    ) as TacitusId[];
     const relay = createRelayConnection({
       onDisconnected: () => dispatch(relayDisconnesso()),
       onError: message => dispatch(erroreMostrato(message)),
@@ -62,7 +72,7 @@ export const useRelayConnection = (): void => {
         dispatch(state === 'online' ? relayConnesso() : relayInConnessione()),
     });
     registraRelay(relay);
-    relay.connect(leggiIdentitaLocale());
+    relay.connect(leggiIdentitaLocale(), tacitusIdBloccati);
     return () => {
       rimuoviRelay(relay);
       relay.close();

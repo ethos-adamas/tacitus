@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { useElencoConversazioni } from '../../application/hooks/useElencoConversazioni';
 import { useRelazioni } from '../../application/hooks/useRelazioni';
-import type { VoceElencoConversazioni } from '../../application/store/selectors';
+import { useSelector } from '../../application/store/hooks';
+import {
+  selectIdentitaBloccate,
+  type VoceElencoConversazioni,
+} from '../../application/store/selectors';
 import type { StatoContatto } from '../../domain/relazioni';
 import type { TacitusId } from '../../domain/tacitusId';
 import AddContactDialog from './AddContactDialog';
@@ -64,9 +68,29 @@ const ConversationRow = ({
   );
 };
 
+type BlockedRowProps = { tacitusId: TacitusId };
+
+const BlockedRow = ({ tacitusId }: BlockedRowProps) => {
+  const { sbloccaContatto } = useRelazioni();
+  const unblock = () => sbloccaContatto(tacitusId);
+  return (
+    <div className="contact blocked-contact">
+      <span className="avatar">×</span>
+      <span>
+        <strong>Identità bloccata</strong>
+        <code>{tacitusId}</code>
+      </span>
+      <button type="button" onClick={unblock} aria-label="Sblocca">
+        Sblocca
+      </button>
+    </div>
+  );
+};
+
 const ConversationList = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const { seleziona, voci } = useElencoConversazioni();
+  const blocchi = useSelector(selectIdentitaBloccate);
   const openDialog = () => setDialogOpen(true);
   const closeDialog = () => setDialogOpen(false);
 
@@ -92,6 +116,14 @@ const ConversationList = () => {
             />
           ),
         )
+      )}
+      {blocchi.length > 0 && (
+        <section className="blocked-identities">
+          <h2>Identità bloccate</h2>
+          {blocchi.map(({ tacitusId }) => (
+            <BlockedRow key={tacitusId} tacitusId={tacitusId} />
+          ))}
+        </section>
       )}
       <AddContactDialog open={dialogOpen} onClose={closeDialog} />
     </aside>

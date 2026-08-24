@@ -19,14 +19,16 @@ type RelayConnectionOptions = {
 export type RelayCommands = {
   aggiungiContatto: (tacitusId: TacitusId) => void;
   annullaIntento: (tacitusId: TacitusId) => void;
+  bloccaContatto: (tacitusId: TacitusId) => void;
   rimuoviContatto: (tacitusId: TacitusId) => void;
+  sbloccaContatto: (tacitusId: TacitusId) => void;
   inviaHandshake: (tacitusId: TacitusId, body: string) => void;
   inviaMessaggio: (tacitusId: TacitusId, body: string) => void;
 };
 
 export type RelayConnection = RelayCommands & {
   close: () => void;
-  connect: (identity: LocalIdentity) => void;
+  connect: (identity: LocalIdentity, blocchi: TacitusId[]) => void;
 };
 
 const errorLabels: Record<string, string> = {
@@ -35,6 +37,8 @@ const errorLabels: Record<string, string> = {
   identity_collision: 'Collisione del Tacitus ID: crea una nuova Identità.',
   invalid_request: 'Richiesta non valida.',
   payload_too_large: 'Dati inviati troppo grandi.',
+  server_busy: 'Server temporaneamente occupato.',
+  server_unavailable: 'Server temporaneamente non disponibile.',
   too_many_contacts: 'Troppi Intenti di contatto aperti.',
 };
 
@@ -51,6 +55,7 @@ export const createRelayConnection = ({
   onStateChanged,
 }: RelayConnectionOptions): RelayConnection => {
   let currentIdentity: LocalIdentity | undefined;
+  const currentBlocks = new Set<TacitusId>();
   let reconnectTimer: number | undefined;
   let receiveQueue = Promise.resolve();
   let socket: WebSocket | undefined;
@@ -61,7 +66,7 @@ export const createRelayConnection = ({
     }
     socket.send(
       JSON.stringify({
-        v: 2,
+        v: 3,
         type,
         request_id: crypto.randomUUID(),
         ...fields,
@@ -77,11 +82,18 @@ export const createRelayConnection = ({
         return;
       socket.send(
         JSON.stringify({
-          v: 2,
+          v: 3,
           type: 'auth.respond',
           nickname: identity.nickname,
           public_key: toBase64Url(identity.publicKey),
           signature: toBase64Url(signature),
+        }),
+      );
+      socket.send(
+        JSON.stringify({
+          v: 3,
+          type: 'contact.blocks.sync',
+          tacitus_ids: [...currentBlocks],
         }),
       );
       return;
@@ -99,8 +111,10 @@ export const createRelayConnection = ({
     if (frame.tipo !== 'conferma') onFrame(frame);
   };
 
-  const connect = (identity: LocalIdentity) => {
+  const connect = (identity: LocalIdentity, blocchi: TacitusId[]) => {
     currentIdentity = identity;
+    currentBlocks.clear();
+    blocchi.forEach(tacitusId => currentBlocks.add(tacitusId));
     clearTimeout(reconnectTimer);
     socket?.close();
     onDisconnected();
@@ -118,7 +132,10 @@ export const createRelayConnection = ({
       if (socket !== nextSocket) return;
       onDisconnected();
       if (currentIdentity === identity) {
-        reconnectTimer = window.setTimeout(() => connect(identity), 2_000);
+        reconnectTimer = window.setTimeout(
+          () => connect(identity, [...currentBlocks]),
+          2_000,
+        );
       }
     };
   };
@@ -137,6 +154,10 @@ export const createRelayConnection = ({
       send('contact.add', { tacitus_id: tacitusId }),
     annullaIntento: tacitusId =>
       send('contact.cancel', { tacitus_id: tacitusId }),
+    bloccaContatto: tacitusId => {
+      currentBlocks.add(tacitusId);
+      send('contact.block', { tacitus_id: tacitusId });
+    },
     close,
     connect,
     inviaHandshake: (tacitusId, body) =>
@@ -145,5 +166,9 @@ export const createRelayConnection = ({
       send('message.send', { to_id: tacitusId, body }),
     rimuoviContatto: tacitusId =>
       send('contact.remove', { tacitus_id: tacitusId }),
+    sbloccaContatto: tacitusId => {
+      currentBlocks.delete(tacitusId);
+      send('contact.unblock', { tacitus_id: tacitusId });
+    },
   };
 };

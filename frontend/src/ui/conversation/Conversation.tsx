@@ -42,7 +42,7 @@ const ConversationContent = ({
   const connection = useSelector(state => state.connessioneRelay);
   const theme = useSelector(state => state.tema);
   const secureSession = useSessioniSicure(contact.tacitusId);
-  const { riattiva, rimuoviContatto } = useRelazioni();
+  const { bloccaContatto, riattiva, rimuoviContatto } = useRelazioni();
   const { aggiornaBozza, invia } = useScambioMessaggi(contact.tacitusId);
   const messagesEnd = useRef<HTMLDivElement>(null);
 
@@ -51,6 +51,12 @@ const ConversationContent = ({
   const remove = () => {
     if (confirm(`Rimuovere ${contact.nickname} e la Conversazione locale?`)) {
       rimuoviContatto(contact.tacitusId);
+    }
+  };
+
+  const block = () => {
+    if (confirm(`Bloccare ${contact.nickname} e rimuovere la Conversazione?`)) {
+      bloccaContatto(contact.tacitusId);
     }
   };
 
@@ -76,6 +82,9 @@ const ConversationContent = ({
         )}
         <button className="danger remove" onClick={remove}>
           Rimuovi
+        </button>
+        <button className="danger" onClick={block}>
+          Blocca
         </button>
       </div>
       <div className="messages">

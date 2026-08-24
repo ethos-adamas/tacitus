@@ -1,5 +1,6 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import type {
+  Blocco,
   Contatto,
   IntentoDiContatto,
   Relazione,
@@ -7,7 +8,9 @@ import type {
 import type { TacitusId } from '../../domain/tacitusId';
 import {
   contattoAssociato,
+  contattoBloccato,
   contattoRimosso,
+  contattoSbloccato,
   intentoDiContattoAnnullato,
   intentoDiContattoCreato,
   relazioneDisattivata,
@@ -15,12 +18,14 @@ import {
 } from './eventi';
 
 export type RelazioniState = {
+  blocchi: Record<TacitusId, Blocco>;
   intenti: Record<TacitusId, IntentoDiContatto>;
   contatti: Record<TacitusId, Contatto>;
   relazioni: Record<TacitusId, Relazione>;
 };
 
 const initialState: RelazioniState = {
+  blocchi: {},
   intenti: {},
   contatti: {},
   relazioni: {},
@@ -65,6 +70,15 @@ const relazioniSlice = createSlice({
         delete state.intenti[payload];
         delete state.contatti[payload];
         delete state.relazioni[payload];
+      })
+      .addCase(contattoBloccato, (state, { payload }) => {
+        state.blocchi[payload] = { tacitusId: payload };
+        delete state.intenti[payload];
+        delete state.contatti[payload];
+        delete state.relazioni[payload];
+      })
+      .addCase(contattoSbloccato, (state, { payload }) => {
+        delete state.blocchi[payload];
       });
   },
 });

@@ -3,6 +3,7 @@ import type { StatoSessioneSicura } from '../../domain/relazioni';
 import type { TacitusId } from '../../domain/tacitusId';
 import {
   contattoAssociato,
+  contattoBloccato,
   contattoRimosso,
   presenzaContattoCambiata,
   relazioneDisattivata,
@@ -36,6 +37,9 @@ const sessioniSicureSlice = createSlice({
         state[payload] = 'assente';
       })
       .addCase(contattoRimosso, (state, { payload }) => {
+        delete state[payload];
+      })
+      .addCase(contattoBloccato, (state, { payload }) => {
         delete state[payload];
       })
       .addCase(relazioniCaricate, (_state, { payload }) =>

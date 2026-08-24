@@ -3,6 +3,7 @@ import type { PresenzaContatto } from '../../domain/relazioni';
 import type { TacitusId } from '../../domain/tacitusId';
 import {
   contattoAssociato,
+  contattoBloccato,
   contattoRimosso,
   presenzaContattoCambiata,
   relayDisconnesso,
@@ -24,6 +25,9 @@ const presenzeContattiSlice = createSlice({
         state[payload.tacitusId] = payload.online ? 'online' : 'offline';
       })
       .addCase(contattoRimosso, (state, { payload }) => {
+        delete state[payload];
+      })
+      .addCase(contattoBloccato, (state, { payload }) => {
         delete state[payload];
       })
       .addCase(relazioniCaricate, (_state, { payload }) =>

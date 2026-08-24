@@ -2,6 +2,8 @@ import type { TacitusId } from './tacitusId';
 
 export type IntentoDiContatto = { tacitusId: TacitusId };
 
+export type Blocco = { tacitusId: TacitusId };
+
 export type Contatto = {
   tacitusId: TacitusId;
   nickname: string;

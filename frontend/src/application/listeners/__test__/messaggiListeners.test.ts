@@ -93,7 +93,9 @@ describe('ricezione dei Messaggi cifrati', () => {
     const relay: RelayCommands = {
       aggiungiContatto: vi.fn(),
       annullaIntento: vi.fn(),
+      bloccaContatto: vi.fn(),
       rimuoviContatto: vi.fn(),
+      sbloccaContatto: vi.fn(),
       inviaHandshake: vi.fn(),
       inviaMessaggio: vi.fn(),
     };

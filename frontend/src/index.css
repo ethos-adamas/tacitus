@@ -57,6 +57,9 @@ aside { border-right: 1px solid var(--line); background: var(--surface-soft); }
 .contact:hover, .contact.selected { background: var(--pale); }
 .contact > span:nth-child(2) { min-width: 0; display: grid; gap: .25rem; }
 .contact small { color: var(--muted); }
+.blocked-identities { border-top: 1px solid var(--line); }
+.blocked-identities h2 { margin: 0; padding: .8rem 1rem .45rem; color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; }
+.blocked-contact button { padding: .45rem .6rem; border: 1px solid var(--line); border-radius: 7px; background: var(--input); }
 .avatar { width: 2.3rem; height: 2.3rem; display: inline-grid; place-items: center; flex: none; border-radius: 50%; color: var(--avatar-text); background: var(--avatar); font-weight: 850; }
 .unread { min-width: 1.3rem; padding: .18rem .35rem; border-radius: 1rem; color: var(--on-green); background: var(--green); font-size: .7rem; text-align: center; }
 .conversation { min-width: 0; display: grid; grid-template-rows: auto 1fr auto; }

@@ -1,7 +1,9 @@
 import { parseTacitusId, type TacitusId } from '../../domain/tacitusId';
 import { leggiRelay } from '../../infrastructure/relay/relayAttivo';
 import {
+  contattoBloccato,
   contattoRimosso,
+  contattoSbloccato,
   intentoDiContattoAnnullato,
   intentoDiContattoCreato,
 } from '../store/eventi';
@@ -38,5 +40,22 @@ export const useRelazioni = () => {
     dispatch(contattoRimosso(tacitusId));
   };
 
-  return { annullaIntento, creaIntento, riattiva, rimuoviContatto };
+  const bloccaContatto = (tacitusId: TacitusId) => {
+    leggiRelay().bloccaContatto(tacitusId);
+    dispatch(contattoBloccato(tacitusId));
+  };
+
+  const sbloccaContatto = (tacitusId: TacitusId) => {
+    leggiRelay().sbloccaContatto(tacitusId);
+    dispatch(contattoSbloccato(tacitusId));
+  };
+
+  return {
+    annullaIntento,
+    bloccaContatto,
+    creaIntento,
+    riattiva,
+    rimuoviContatto,
+    sbloccaContatto,
+  };
 };

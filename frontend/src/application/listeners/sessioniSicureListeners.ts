@@ -1,5 +1,6 @@
 import {
   contattoAssociato,
+  contattoBloccato,
   contattoRimosso,
   handshakeRicevuto,
   presenzaContattoCambiata,
@@ -52,6 +53,10 @@ export const registerSessioniSicureListeners = (
   });
   startListening({
     actionCreator: contattoRimosso,
+    effect: ({ payload }) => sessioni.elimina(payload),
+  });
+  startListening({
+    actionCreator: contattoBloccato,
     effect: ({ payload }) => sessioni.elimina(payload),
   });
   startListening({

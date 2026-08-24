@@ -1,7 +1,9 @@
 import { isAnyOf } from '@reduxjs/toolkit';
 import {
   contattoAssociato,
+  contattoBloccato,
   contattoRimosso,
+  contattoSbloccato,
   intentoDiContattoAnnullato,
   intentoDiContattoCreato,
   messaggioInviato,
@@ -28,7 +30,9 @@ export const registerPersistenzaListeners = (
     matcher: isAnyOf(
       bozzaAggiornata,
       contattoAssociato,
+      contattoBloccato,
       contattoRimosso,
+      contattoSbloccato,
       conversazioneSelezionata,
       conversazioniCaricate,
       intentoDiContattoAnnullato,

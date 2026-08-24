@@ -29,6 +29,14 @@ export const contattoRimosso = createAction<TacitusId>(
   'relazioni/contattoRimosso',
 );
 
+export const contattoBloccato = createAction<TacitusId>(
+  'relazioni/contattoBloccato',
+);
+
+export const contattoSbloccato = createAction<TacitusId>(
+  'relazioni/contattoSbloccato',
+);
+
 export const sessioneSicuraInNegoziazione = createAction<TacitusId>(
   'sessioniSicure/sessioneSicuraInNegoziazione',
 );
