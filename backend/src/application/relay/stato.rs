@@ -13,14 +13,14 @@ use crate::domain::{
 use super::{ComandoRelay, ErroreRelay, EventoRelay};
 
 #[derive(Clone, Debug)]
-struct IdentitaRuntime {
+struct IdentitaRegistrata {
     identita: IdentitaAutenticata,
     sessione: StatoSessione,
 }
 
 #[derive(Default)]
 pub struct Relay {
-    identita: HashMap<TacitusId, IdentitaRuntime>,
+    identita: HashMap<TacitusId, IdentitaRegistrata>,
     identita_per_sessione: HashMap<SessionId, TacitusId>,
     intenti: HashSet<IntentoDiContatto>,
     relazioni: HashSet<Relazione>,

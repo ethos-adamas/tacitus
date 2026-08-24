@@ -4,7 +4,7 @@ use crate::{
         identita::TacitusId,
         relay::{CorpoCifrato, RichiestaId, TipoPayload},
         relazioni::{Blocco, IntentoDiContatto, Relazione},
-        sessioni::SessionId,
+        sessioni::{Presenza, SessionId},
     },
 };
 
@@ -72,7 +72,7 @@ impl Relay {
                 evento: EventoSessione::RelazioneStabilita {
                     tacitus_id: destinatario.clone(),
                     nickname: destinatario_runtime.identita.nickname().to_owned(),
-                    online: true,
+                    presenza: Presenza::Online,
                 },
             },
             EventoRelay::Consegna {
@@ -80,7 +80,7 @@ impl Relay {
                 evento: EventoSessione::RelazioneStabilita {
                     tacitus_id: mittente,
                     nickname: mittente_runtime.identita.nickname().to_owned(),
-                    online: true,
+                    presenza: Presenza::Online,
                 },
             },
         ])
@@ -234,7 +234,7 @@ impl Relay {
             evento: EventoSessione::RelazioneStabilita {
                 tacitus_id: destinatario.clone(),
                 nickname: runtime.identita.nickname().to_owned(),
-                online: runtime.sessione.attiva(),
+                presenza: runtime.sessione.presenza(),
             },
         }])
     }

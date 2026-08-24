@@ -110,12 +110,12 @@ impl From<EventoSessione> for FrameServer {
             EventoSessione::RelazioneStabilita {
                 tacitus_id,
                 nickname,
-                online,
+                presenza,
             } => Self::ContattoAssociato {
                 v: VERSIONE_PROTOCOLLO,
                 tacitus_id: tacitus_id.to_string(),
                 nickname,
-                online,
+                online: presenza.online(),
             },
             EventoSessione::RelazioneTerminata { tacitus_id } => Self::RelazioneCambiata {
                 v: VERSIONE_PROTOCOLLO,
@@ -146,10 +146,13 @@ impl From<EventoSessione> for FrameServer {
                 request_id: richiesta.as_str().to_owned(),
                 tacitus_id: tacitus_id.to_string(),
             },
-            EventoSessione::PresenzaCambiata { tacitus_id, online } => Self::PresenzaCambiata {
+            EventoSessione::PresenzaCambiata {
+                tacitus_id,
+                presenza,
+            } => Self::PresenzaCambiata {
                 v: VERSIONE_PROTOCOLLO,
                 tacitus_id: tacitus_id.to_string(),
-                online,
+                online: presenza.online(),
             },
             EventoSessione::PayloadInviato { richiesta, tipo } => match tipo {
                 TipoPayload::Handshake => Self::HandshakeInviato {
@@ -190,7 +193,6 @@ pub fn codice_errore(errore: ErroreCoordinatore) -> &'static str {
             ErroreRelay::CollisioneIdentita => "identity_collision",
             ErroreRelay::ContattoNonDisponibile => "contact_unavailable",
             ErroreRelay::RichiestaNonValida => "invalid_request",
-            ErroreRelay::DatiTroppoGrandi => "payload_too_large",
             ErroreRelay::TroppiIntenti => "too_many_contacts",
         },
     }

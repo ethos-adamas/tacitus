@@ -12,6 +12,5 @@ pub enum ErroreRelay {
     CollisioneIdentita,
     ContattoNonDisponibile,
     RichiestaNonValida,
-    DatiTroppoGrandi,
     TroppiIntenti,
 }

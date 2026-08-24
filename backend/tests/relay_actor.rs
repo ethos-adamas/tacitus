@@ -8,7 +8,7 @@ use tacitus_backend::{
     domain::{
         identita::{IdentitaAutenticata, TacitusId},
         relay::{CorpoCifrato, RichiestaId, TipoPayload},
-        sessioni::SessionId,
+        sessioni::{Presenza, SessionId},
     },
     infrastructure::actors::{avvia_relay_actor, nuovo_canale_sessione},
 };
@@ -28,7 +28,7 @@ fn una_mailbox_di_sessione_piena_applica_backpressure() {
     let (destinatario, _ricevitore) = nuovo_canale_sessione(sessione("alice-session"), 1);
     let evento = EventoSessione::PresenzaCambiata {
         tacitus_id: TacitusId::from_bytes([2; 16]),
-        online: true,
+        presenza: Presenza::Online,
     };
     destinatario.consegna(evento.clone()).unwrap();
 

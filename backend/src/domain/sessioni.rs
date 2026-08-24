@@ -39,6 +39,25 @@ impl StatoSessione {
     pub fn attiva(&self) -> bool {
         matches!(self, Self::Attiva(_))
     }
+
+    pub fn presenza(&self) -> Presenza {
+        match self {
+            Self::Attiva(_) => Presenza::Online,
+            Self::InAttesaDiRiconnessione(_) => Presenza::Offline,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Presenza {
+    Online,
+    Offline,
+}
+
+impl Presenza {
+    pub fn online(self) -> bool {
+        self == Self::Online
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -59,7 +59,7 @@ export const createRelayConnection = ({
   let currentIdentity: LocalIdentity | undefined;
   let reconnectTimer: number | undefined;
   let receiveQueue = Promise.resolve();
-  const richiesteSincronizzazioneBlocchi = new Set<string>();
+  const richiesteModificaBlocchiPendenti = new Set<string>();
   let socket: WebSocket | undefined;
 
   const send = (type: string, fields: Record<string, unknown>) => {
@@ -112,14 +112,14 @@ export const createRelayConnection = ({
       );
       if (
         frame.richiesta &&
-        richiesteSincronizzazioneBlocchi.delete(frame.richiesta)
+        richiesteModificaBlocchiPendenti.delete(frame.richiesta)
       ) {
         socket?.close();
       }
       return;
     }
     if (frame.tipo === 'conferma') {
-      richiesteSincronizzazioneBlocchi.delete(frame.richiesta);
+      richiesteModificaBlocchiPendenti.delete(frame.richiesta);
       return;
     }
     onFrame(frame);
@@ -127,7 +127,7 @@ export const createRelayConnection = ({
 
   const connect = (identity: LocalIdentity) => {
     currentIdentity = identity;
-    richiesteSincronizzazioneBlocchi.clear();
+    richiesteModificaBlocchiPendenti.clear();
     clearTimeout(reconnectTimer);
     socket?.close();
     onDisconnected();
@@ -165,7 +165,7 @@ export const createRelayConnection = ({
     annullaIntento: tacitusId =>
       send('contact.cancel', { tacitus_id: tacitusId }),
     bloccaContatto: tacitusId => {
-      richiesteSincronizzazioneBlocchi.add(
+      richiesteModificaBlocchiPendenti.add(
         send('contact.block', { tacitus_id: tacitusId }),
       );
     },
@@ -178,7 +178,7 @@ export const createRelayConnection = ({
     rimuoviContatto: tacitusId =>
       send('contact.remove', { tacitus_id: tacitusId }),
     sbloccaContatto: tacitusId => {
-      richiesteSincronizzazioneBlocchi.add(
+      richiesteModificaBlocchiPendenti.add(
         send('contact.unblock', { tacitus_id: tacitusId }),
       );
     },

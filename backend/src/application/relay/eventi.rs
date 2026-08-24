@@ -3,7 +3,7 @@ use std::time::Duration;
 use crate::domain::{
     identita::TacitusId,
     relay::{CorpoCifrato, RichiestaId, TipoPayload},
-    sessioni::SessionId,
+    sessioni::{Presenza, SessionId},
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -19,7 +19,7 @@ pub enum EventoSessione {
     RelazioneStabilita {
         tacitus_id: TacitusId,
         nickname: String,
-        online: bool,
+        presenza: Presenza,
     },
     RelazioneTerminata {
         tacitus_id: TacitusId,
@@ -38,7 +38,7 @@ pub enum EventoSessione {
     },
     PresenzaCambiata {
         tacitus_id: TacitusId,
-        online: bool,
+        presenza: Presenza,
     },
     PayloadInviato {
         richiesta: RichiestaId,

@@ -1,10 +1,10 @@
 use crate::domain::{
     identita::{IdentitaAutenticata, TacitusId},
     relazioni::{Blocco, MASSIMO_BLOCCHI_PER_IDENTITA},
-    sessioni::{SessionId, StatoSessione},
+    sessioni::{Presenza, SessionId, StatoSessione},
 };
 
-use super::{ErroreRelay, EventoRelay, IdentitaRuntime, Relay};
+use super::{ErroreRelay, EventoRelay, IdentitaRegistrata, Relay};
 use crate::application::relay::{EventoSessione, MotivoChiusura};
 
 impl Relay {
@@ -36,7 +36,7 @@ impl Relay {
 
         self.identita.insert(
             tacitus_id.clone(),
-            IdentitaRuntime {
+            IdentitaRegistrata {
                 identita: identita.clone(),
                 sessione: StatoSessione::Attiva(sessione.clone()),
             },
@@ -123,7 +123,7 @@ impl Relay {
                 evento: EventoSessione::RelazioneStabilita {
                     tacitus_id: altra_id.clone(),
                     nickname: altra.identita.nickname().to_owned(),
-                    online: altra.sessione.attiva(),
+                    presenza: altra.sessione.presenza(),
                 },
             });
             if let StatoSessione::Attiva(altra_sessione) = &altra.sessione {
@@ -131,7 +131,7 @@ impl Relay {
                     sessione: altra_sessione.clone(),
                     evento: EventoSessione::PresenzaCambiata {
                         tacitus_id: identita.clone(),
-                        online: true,
+                        presenza: Presenza::Online,
                     },
                 });
             }

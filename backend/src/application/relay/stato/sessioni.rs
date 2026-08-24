@@ -5,7 +5,7 @@ use crate::{
     domain::{
         identita::TacitusId,
         relazioni::IntentoDiContatto,
-        sessioni::{SessionId, StatoSessione},
+        sessioni::{Presenza, SessionId, StatoSessione},
     },
 };
 
@@ -27,7 +27,7 @@ impl Relay {
             .ok_or(ErroreRelay::AutenticazioneFallita)?;
         runtime.sessione = StatoSessione::InAttesaDiRiconnessione(sessione.clone());
 
-        let mut eventi = self.notifica_presenza(&identita, false);
+        let mut eventi = self.notifica_presenza(&identita, Presenza::Offline);
         eventi.push(EventoRelay::PianificaScadenza {
             identita,
             sessione: sessione.clone(),
@@ -79,7 +79,7 @@ impl Relay {
         eventi
     }
 
-    fn notifica_presenza(&self, identita: &TacitusId, online: bool) -> Vec<EventoRelay> {
+    fn notifica_presenza(&self, identita: &TacitusId, presenza: Presenza) -> Vec<EventoRelay> {
         self.relazioni
             .iter()
             .filter_map(|relazione| relazione.altra(identita))
@@ -88,7 +88,7 @@ impl Relay {
                 sessione: sessione.clone(),
                 evento: EventoSessione::PresenzaCambiata {
                     tacitus_id: identita.clone(),
-                    online,
+                    presenza,
                 },
             })
             .collect()
