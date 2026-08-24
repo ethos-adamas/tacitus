@@ -11,6 +11,7 @@
     "format": "prettier --write .oxlintrc.json .prettierrc.json package.json tsconfig*.json vite.config.ts playwright.config.ts index.html src e2e",
     "format:check": "prettier --check .oxlintrc.json .prettierrc.json package.json tsconfig*.json vite.config.ts playwright.config.ts index.html src e2e",
     "lint": "oxlint",
+    "pretest": "npm run protocol:build",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "typecheck": "npm run protocol:build && tsc -b --pretty false",
