@@ -3,8 +3,8 @@ use std::time::Duration;
 use crate::{
     application::relay::{ErroreRelay, EventoRelay, EventoSessione},
     domain::{
-        contatti::IntentoDiContatto,
         identita::TacitusId,
+        relazioni::IntentoDiContatto,
         sessioni::{SessionId, StatoSessione},
     },
 };
@@ -51,25 +51,24 @@ impl Relay {
             return Vec::new();
         }
         let relazioni: Vec<_> = self
-            .contatti
+            .relazioni
             .iter()
-            .filter(|contatto| contatto.contiene(identita))
+            .filter(|relazione| relazione.contiene(identita))
             .cloned()
             .collect();
         let mut eventi = Vec::new();
-        for contatto in relazioni {
-            let Some(altra) = contatto.altra(identita).cloned() else {
+        for relazione in relazioni {
+            let Some(altra) = relazione.altra(identita).cloned() else {
                 continue;
             };
-            self.contatti.remove(&contatto);
+            self.relazioni.remove(&relazione);
             if let Ok(sessione_altra) = self.sessione_attiva(&altra).cloned() {
                 self.intenti
                     .insert(IntentoDiContatto::new(altra.clone(), identita.clone()));
                 eventi.push(EventoRelay::Consegna {
                     sessione: sessione_altra,
-                    evento: EventoSessione::RelazioneCambiata {
+                    evento: EventoSessione::RelazioneTerminata {
                         tacitus_id: identita.clone(),
-                        attiva: false,
                     },
                 });
             }
@@ -81,9 +80,9 @@ impl Relay {
     }
 
     fn notifica_presenza(&self, identita: &TacitusId, online: bool) -> Vec<EventoRelay> {
-        self.contatti
+        self.relazioni
             .iter()
-            .filter_map(|contatto| contatto.altra(identita))
+            .filter_map(|relazione| relazione.altra(identita))
             .filter_map(|altra| self.sessione_attiva(altra).ok())
             .map(|sessione| EventoRelay::Consegna {
                 sessione: sessione.clone(),

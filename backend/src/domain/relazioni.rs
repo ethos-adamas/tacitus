@@ -15,9 +15,9 @@ impl IntentoDiContatto {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Contatto(TacitusId, TacitusId);
+pub struct Relazione(TacitusId, TacitusId);
 
-impl Contatto {
+impl Relazione {
     pub fn new(prima: TacitusId, seconda: TacitusId) -> Self {
         if prima <= seconda {
             Self(prima, seconda)

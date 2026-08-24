@@ -41,13 +41,21 @@ export const useRelazioni = () => {
   };
 
   const bloccaContatto = (tacitusId: TacitusId) => {
-    leggiRelay().bloccaContatto(tacitusId);
     dispatch(contattoBloccato(tacitusId));
+    try {
+      leggiRelay().bloccaContatto(tacitusId);
+    } catch {
+      return;
+    }
   };
 
   const sbloccaContatto = (tacitusId: TacitusId) => {
-    leggiRelay().sbloccaContatto(tacitusId);
     dispatch(contattoSbloccato(tacitusId));
+    try {
+      leggiRelay().sbloccaContatto(tacitusId);
+    } catch {
+      return;
+    }
   };
 
   return {

@@ -8,8 +8,8 @@ export type RelayFrame =
       nickname: string;
       tacitusId: TacitusId;
     }
-  | { tipo: 'errore'; codice: string }
-  | { tipo: 'conferma' }
+  | { tipo: 'errore'; codice: string; richiesta?: string }
+  | { tipo: 'conferma'; richiesta: string }
   | { tipo: 'intento-confermato'; tacitusId: TacitusId }
   | {
       tipo: 'contatto-associato';
@@ -75,21 +75,24 @@ const parseRecord = (record: Record<string, unknown>): RelayFrame => {
         tacitusId: tacitusIdOf(record, 'tacitus_id'),
       };
     case 'error': {
-      optionalStringOf(record, 'request_id');
-      return { tipo: 'errore', codice: stringOf(record, 'code') };
+      return {
+        tipo: 'errore',
+        codice: stringOf(record, 'code'),
+        richiesta: optionalStringOf(record, 'request_id'),
+      };
     }
     case 'handshake.sent':
     case 'message.sent':
     case 'contact.blocked':
     case 'contact.unblocked':
-      stringOf(record, 'request_id');
+      const richiesta = stringOf(record, 'request_id');
       if (
         record.type === 'contact.blocked' ||
         record.type === 'contact.unblocked'
       ) {
         tacitusIdOf(record, 'tacitus_id');
       }
-      return { tipo: 'conferma' };
+      return { tipo: 'conferma', richiesta };
     case 'contact.pending':
       optionalStringOf(record, 'request_id');
       return {

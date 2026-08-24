@@ -1,17 +1,11 @@
 use crate::domain::{
-    contatti::Blocco,
-    identita::{IdentitaAutenticata, TacitusId},
+    identita::TacitusId,
     relay::{CorpoCifrato, RichiestaId, TipoPayload},
     sessioni::SessionId,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ComandoRelay {
-    RegistraSessione {
-        identita: IdentitaAutenticata,
-        sessione: SessionId,
-        blocchi: Vec<Blocco>,
-    },
     Disconnetti {
         sessione: SessionId,
     },
@@ -29,7 +23,7 @@ pub enum ComandoRelay {
         richiesta: RichiestaId,
         destinatario: TacitusId,
     },
-    RimuoviContatto {
+    RimuoviRelazione {
         sessione: SessionId,
         richiesta: RichiestaId,
         destinatario: TacitusId,

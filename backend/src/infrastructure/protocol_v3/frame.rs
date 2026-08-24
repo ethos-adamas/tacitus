@@ -3,9 +3,9 @@ use std::str::FromStr;
 use serde::Deserialize;
 
 use crate::domain::{
-    contatti::MASSIMO_BLOCCHI_PER_IDENTITA,
     identita::TacitusId,
     relay::{CorpoCifrato, RichiestaId, TipoPayload},
+    relazioni::MASSIMO_BLOCCHI_PER_IDENTITA,
 };
 
 mod server;

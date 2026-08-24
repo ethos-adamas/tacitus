@@ -1,12 +1,12 @@
-mod contatti;
 mod registrazione;
+mod relazioni;
 mod sessioni;
 
 use std::collections::{HashMap, HashSet};
 
 use crate::domain::{
-    contatti::{Blocco, Contatto, IntentoDiContatto},
     identita::{IdentitaAutenticata, TacitusId},
+    relazioni::{Blocco, IntentoDiContatto, Relazione},
     sessioni::{SessionId, StatoSessione},
 };
 
@@ -23,18 +23,13 @@ pub struct Relay {
     identita: HashMap<TacitusId, IdentitaRuntime>,
     identita_per_sessione: HashMap<SessionId, TacitusId>,
     intenti: HashSet<IntentoDiContatto>,
-    contatti: HashSet<Contatto>,
+    relazioni: HashSet<Relazione>,
     blocchi: HashSet<Blocco>,
 }
 
 impl Relay {
     pub fn esegui(&mut self, comando: ComandoRelay) -> Result<Vec<EventoRelay>, ErroreRelay> {
         match comando {
-            ComandoRelay::RegistraSessione {
-                identita,
-                sessione,
-                blocchi,
-            } => self.registra(identita, sessione, blocchi),
             ComandoRelay::Disconnetti { sessione } => self.disconnetti(&sessione),
             ComandoRelay::ScadenzaSessione { identita, sessione } => {
                 Ok(self.scadenza_sessione(&identita, &sessione))
@@ -49,11 +44,11 @@ impl Relay {
                 richiesta,
                 destinatario,
             } => self.annulla_intento(&sessione, richiesta, destinatario),
-            ComandoRelay::RimuoviContatto {
+            ComandoRelay::RimuoviRelazione {
                 sessione,
                 richiesta,
                 destinatario,
-            } => self.rimuovi_contatto(&sessione, richiesta, destinatario),
+            } => self.rimuovi_relazione(&sessione, richiesta, destinatario),
             ComandoRelay::Blocca {
                 sessione,
                 richiesta,

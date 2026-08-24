@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import type { TacitusId } from '../../domain/tacitusId';
 import {
   contattoAssociato,
@@ -13,7 +13,7 @@ import {
   relayInConnessione,
 } from '../store/eventi';
 import { erroreMostrato } from '../store/feedbackSlice';
-import { useDispatch, useSelector } from '../store/hooks';
+import { useDispatch, useSelector, useStore } from '../store/hooks';
 import { leggiIdentitaLocale } from '../../infrastructure/identity/identitaLocaleCorrente';
 import { createRelayConnection } from '../../infrastructure/relay/relayConnection';
 import {
@@ -23,20 +23,14 @@ import {
 
 export const useRelayConnection = (): void => {
   const dispatch = useDispatch();
+  const store = useStore();
   const identitaState = useSelector(state => state.identitaLocale);
-  const blocchi = useSelector(state => state.relazioni.blocchi);
-  const blocchiCorrenti = useRef(blocchi);
-
-  useEffect(() => {
-    blocchiCorrenti.current = blocchi;
-  }, [blocchi]);
 
   useEffect(() => {
     if (identitaState.stato !== 'pronta') return;
-    const tacitusIdBloccati = Object.keys(
-      blocchiCorrenti.current,
-    ) as TacitusId[];
     const relay = createRelayConnection({
+      leggiBlocchi: () =>
+        Object.keys(store.getState().relazioni.blocchi) as TacitusId[],
       onDisconnected: () => dispatch(relayDisconnesso()),
       onError: message => dispatch(erroreMostrato(message)),
       onFrame: frame => {
@@ -72,10 +66,10 @@ export const useRelayConnection = (): void => {
         dispatch(state === 'online' ? relayConnesso() : relayInConnessione()),
     });
     registraRelay(relay);
-    relay.connect(leggiIdentitaLocale(), tacitusIdBloccati);
+    relay.connect(leggiIdentitaLocale());
     return () => {
       rimuoviRelay(relay);
       relay.close();
     };
-  }, [dispatch, identitaState]);
+  }, [dispatch, identitaState, store]);
 };

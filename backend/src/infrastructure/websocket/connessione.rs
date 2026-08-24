@@ -7,10 +7,10 @@ use tracing::{info, warn};
 
 use crate::{
     application::{
-        ports::coordinatore_relay::{CoordinatoreRelay, ErroreCoordinatore},
+        ports::coordinatore_relay::{CoordinatoreRelay, ErroreCoordinatore, RegistrazioneSessione},
         relay::{ComandoRelay, ErroreRelay, MotivoChiusura},
     },
-    domain::{contatti::Blocco, sessioni::SessionId},
+    domain::{relazioni::Blocco, sessioni::SessionId},
     infrastructure::{
         actors::{RelayHandle, RicevitoreSessione, nuovo_canale_sessione},
         protocol_v3::{
@@ -43,15 +43,12 @@ pub async fn gestisci_connessione(
     let (destinatario, ricevitore) =
         nuovo_canale_sessione(sessione.clone(), CAPACITA_MAILBOX_SESSIONE);
     let registrazione = relay
-        .registra(
-            ComandoRelay::RegistraSessione {
-                identita,
-                sessione: sessione.clone(),
-                blocchi,
-            },
-            sessione.clone(),
+        .registra(RegistrazioneSessione {
+            identita,
+            sessione: sessione.clone(),
+            blocchi,
             destinatario,
-        )
+        })
         .await;
     if let Err(errore) = registrazione {
         let _ = invia_errore(&mut socket, None, codice_errore(errore)).await;
@@ -156,7 +153,7 @@ fn comando(
             destinatario,
         } => {
             limiti.contatto(ora)?;
-            Ok(ComandoRelay::RimuoviContatto {
+            Ok(ComandoRelay::RimuoviRelazione {
                 sessione: sessione.clone(),
                 richiesta,
                 destinatario,

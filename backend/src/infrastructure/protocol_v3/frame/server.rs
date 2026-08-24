@@ -107,7 +107,7 @@ impl From<EventoSessione> for FrameServer {
                 request_id: richiesta.map(|id| id.as_str().to_owned()),
                 tacitus_id: tacitus_id.to_string(),
             },
-            EventoSessione::ContattoAssociato {
+            EventoSessione::RelazioneStabilita {
                 tacitus_id,
                 nickname,
                 online,
@@ -117,12 +117,12 @@ impl From<EventoSessione> for FrameServer {
                 nickname,
                 online,
             },
-            EventoSessione::RelazioneCambiata { tacitus_id, attiva } => Self::RelazioneCambiata {
+            EventoSessione::RelazioneTerminata { tacitus_id } => Self::RelazioneCambiata {
                 v: VERSIONE_PROTOCOLLO,
                 tacitus_id: tacitus_id.to_string(),
-                active: attiva,
+                active: false,
             },
-            EventoSessione::ContattoRimosso {
+            EventoSessione::RelazioneRimossa {
                 richiesta,
                 tacitus_id,
             } => Self::ContattoRimosso {

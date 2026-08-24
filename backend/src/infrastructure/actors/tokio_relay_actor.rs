@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use tokio::{
     sync::{mpsc, oneshot},
@@ -8,16 +8,21 @@ use tokio::{
 
 use crate::{
     application::{
-        ports::coordinatore_relay::{CoordinatoreRelay, DestinatarioSessione, ErroreCoordinatore},
+        ports::coordinatore_relay::{
+            CoordinatoreRelay, DestinatarioSessione, ErroreCoordinatore, RegistrazioneSessione,
+        },
         relay::{ComandoRelay, ErroreRelay, EventoRelay, MotivoChiusura, Relay},
     },
-    domain::sessioni::SessionId,
+    domain::{identita::TacitusId, sessioni::SessionId},
 };
 
 enum MessaggioActor {
     Esegui {
         comando: ComandoRelay,
-        registrazione: Option<(SessionId, Arc<dyn DestinatarioSessione>)>,
+        risposta: oneshot::Sender<Result<(), ErroreCoordinatore>>,
+    },
+    Registra {
+        registrazione: RegistrazioneSessione,
         risposta: oneshot::Sender<Result<(), ErroreCoordinatore>>,
     },
     Scadenza(ComandoRelay),
@@ -37,14 +42,11 @@ impl RelayHandle {
     fn invia(
         &self,
         comando: ComandoRelay,
-        registrazione: Option<(SessionId, Arc<dyn DestinatarioSessione>)>,
     ) -> impl Future<Output = Result<(), ErroreCoordinatore>> + Send {
         let (risposta, ricevitore) = oneshot::channel();
-        let invio = self.mailbox.try_send(MessaggioActor::Esegui {
-            comando,
-            registrazione,
-            risposta,
-        });
+        let invio = self
+            .mailbox
+            .try_send(MessaggioActor::Esegui { comando, risposta });
         async move {
             invio.map_err(|errore| match errore {
                 mpsc::error::TrySendError::Full(_) => ErroreCoordinatore::ServerOccupato,
@@ -62,16 +64,29 @@ impl CoordinatoreRelay for RelayHandle {
         &self,
         comando: ComandoRelay,
     ) -> impl Future<Output = Result<(), ErroreCoordinatore>> + Send {
-        self.invia(comando, None)
+        self.invia(comando)
     }
 
     fn registra(
         &self,
-        comando: ComandoRelay,
-        sessione: SessionId,
-        destinatario: Arc<dyn DestinatarioSessione>,
+        registrazione: RegistrazioneSessione,
     ) -> impl Future<Output = Result<(), ErroreCoordinatore>> + Send {
-        self.invia(comando, Some((sessione, destinatario)))
+        let mailbox = self.mailbox.clone();
+        async move {
+            let (risposta, ricevitore) = oneshot::channel();
+            mailbox
+                .try_send(MessaggioActor::Registra {
+                    registrazione,
+                    risposta,
+                })
+                .map_err(|errore| match errore {
+                    mpsc::error::TrySendError::Full(_) => ErroreCoordinatore::ServerOccupato,
+                    mpsc::error::TrySendError::Closed(_) => ErroreCoordinatore::ActorTerminato,
+                })?;
+            ricevitore
+                .await
+                .unwrap_or(Err(ErroreCoordinatore::ActorTerminato))
+        }
     }
 
     fn arresta(&self) -> impl Future<Output = Result<(), ErroreCoordinatore>> + Send {
@@ -114,16 +129,19 @@ impl RelayActor {
     async fn esegui(mut self) {
         while let Some(messaggio) = self.ricevitore.recv().await {
             match messaggio {
-                MessaggioActor::Esegui {
-                    comando,
+                MessaggioActor::Esegui { comando, risposta } => {
+                    let risultato = self.processa(comando);
+                    let _ = risposta.send(risultato);
+                }
+                MessaggioActor::Registra {
                     registrazione,
                     risposta,
                 } => {
-                    let risultato = self.processa(comando, registrazione);
+                    let risultato = self.registra(registrazione);
                     let _ = risposta.send(risultato);
                 }
                 MessaggioActor::Scadenza(comando) => {
-                    let _ = self.processa(comando, None);
+                    let _ = self.processa(comando);
                 }
                 MessaggioActor::Arresta(risposta) => {
                     self.chiudi_tutte(MotivoChiusura::RiavvioServizio);
@@ -135,33 +153,43 @@ impl RelayActor {
         self.chiudi_tutte(MotivoChiusura::RiavvioServizio);
     }
 
-    fn processa(
-        &mut self,
-        comando: ComandoRelay,
-        registrazione: Option<(SessionId, Arc<dyn DestinatarioSessione>)>,
-    ) -> Result<(), ErroreCoordinatore> {
+    fn processa(&mut self, comando: ComandoRelay) -> Result<(), ErroreCoordinatore> {
         let sessione_disconnessa = match &comando {
             ComandoRelay::Disconnetti { sessione } => Some(sessione.clone()),
             _ => None,
         };
-        if let Some((sessione, destinatario)) = &registrazione {
-            self.destinatari
-                .insert(sessione.clone(), Arc::clone(destinatario));
-        }
-        let eventi = match self.relay.esegui(comando) {
-            Ok(eventi) => eventi,
-            Err(errore) => {
-                if let Some((sessione, _)) = registrazione {
-                    self.destinatari.remove(&sessione);
-                }
-                return Err(ErroreCoordinatore::Relay(errore));
-            }
-        };
+        let eventi = self
+            .relay
+            .esegui(comando)
+            .map_err(ErroreCoordinatore::Relay)?;
         if let Some(sessione) = sessione_disconnessa {
             self.destinatari.remove(&sessione);
         }
         self.processa_eventi(eventi)
             .map_err(ErroreCoordinatore::Relay)
+    }
+
+    fn registra(&mut self, registrazione: RegistrazioneSessione) -> Result<(), ErroreCoordinatore> {
+        let RegistrazioneSessione {
+            identita,
+            sessione,
+            blocchi,
+            destinatario,
+        } = registrazione;
+        self.destinatari
+            .insert(sessione.clone(), Arc::clone(&destinatario));
+        let eventi = match self.relay.registra(identita, sessione.clone(), blocchi) {
+            Ok(eventi) => eventi,
+            Err(errore) => {
+                self.destinatari.remove(&sessione);
+                return Err(ErroreCoordinatore::Relay(errore));
+            }
+        };
+        if let Err(errore) = self.processa_eventi(eventi) {
+            self.sessione_non_disponibile(&sessione);
+            return Err(ErroreCoordinatore::Relay(errore));
+        }
+        Ok(())
     }
 
     fn processa_eventi(&mut self, eventi: Vec<EventoRelay>) -> Result<(), ErroreRelay> {
@@ -192,18 +220,7 @@ impl RelayActor {
                     identita,
                     sessione,
                     dopo,
-                } => {
-                    let mailbox = self.mailbox.clone();
-                    tokio::spawn(async move {
-                        sleep(dopo).await;
-                        let _ = mailbox
-                            .send(MessaggioActor::Scadenza(ComandoRelay::ScadenzaSessione {
-                                identita,
-                                sessione,
-                            }))
-                            .await;
-                    });
-                }
+                } => self.pianifica_scadenza(identita, sessione, dopo),
                 EventoRelay::ChiudiSessione { sessione, motivo } => {
                     if let Some(destinatario) = self.destinatari.remove(&sessione) {
                         destinatario.chiudi(motivo);
@@ -244,21 +261,23 @@ impl RelayActor {
                     identita,
                     sessione,
                     dopo,
-                } => {
-                    let mailbox = self.mailbox.clone();
-                    tokio::spawn(async move {
-                        sleep(dopo).await;
-                        let _ = mailbox
-                            .send(MessaggioActor::Scadenza(ComandoRelay::ScadenzaSessione {
-                                identita,
-                                sessione,
-                            }))
-                            .await;
-                    });
-                }
+                } => self.pianifica_scadenza(identita, sessione, dopo),
                 EventoRelay::Instradamento { .. } | EventoRelay::ChiudiSessione { .. } => {}
             }
         }
+    }
+
+    fn pianifica_scadenza(&self, identita: TacitusId, sessione: SessionId, dopo: Duration) {
+        let mailbox = self.mailbox.clone();
+        tokio::spawn(async move {
+            sleep(dopo).await;
+            let _ = mailbox
+                .send(MessaggioActor::Scadenza(ComandoRelay::ScadenzaSessione {
+                    identita,
+                    sessione,
+                }))
+                .await;
+        });
     }
 
     fn chiudi_tutte(&mut self, motivo: MotivoChiusura) {

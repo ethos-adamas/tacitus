@@ -1,6 +1,6 @@
 use crate::domain::{
-    contatti::{Blocco, MASSIMO_BLOCCHI_PER_IDENTITA},
     identita::{IdentitaAutenticata, TacitusId},
+    relazioni::{Blocco, MASSIMO_BLOCCHI_PER_IDENTITA},
     sessioni::{SessionId, StatoSessione},
 };
 
@@ -8,7 +8,7 @@ use super::{ErroreRelay, EventoRelay, IdentitaRuntime, Relay};
 use crate::application::relay::{EventoSessione, MotivoChiusura};
 
 impl Relay {
-    pub(super) fn registra(
+    pub fn registra(
         &mut self,
         identita: IdentitaAutenticata,
         sessione: SessionId,
@@ -51,7 +51,7 @@ impl Relay {
                 tacitus_id: tacitus_id.clone(),
             },
         });
-        eventi.extend(self.snapshot_contatti(&tacitus_id, &sessione));
+        eventi.extend(self.snapshot_relazioni(&tacitus_id, &sessione));
         Ok(eventi)
     }
 
@@ -71,31 +71,37 @@ impl Relay {
         identita: &TacitusId,
         nuovi_blocchi: Vec<Blocco>,
     ) -> Vec<EventoRelay> {
+        let identita_bloccate: Vec<_> = nuovi_blocchi
+            .iter()
+            .map(|blocco| blocco.verso.clone())
+            .collect();
         self.blocchi.retain(|blocco| &blocco.da != identita);
         self.blocchi.extend(nuovi_blocchi);
+        for bloccata in &identita_bloccate {
+            self.rimuovi_intenti_reciproci(identita, bloccata);
+        }
         let da_rimuovere: Vec<_> = self
-            .contatti
+            .relazioni
             .iter()
-            .filter(|contatto| {
-                contatto
+            .filter(|relazione| {
+                relazione
                     .altra(identita)
                     .is_some_and(|altra| self.esiste_blocco(identita, altra))
             })
             .cloned()
             .collect();
         let mut eventi = Vec::new();
-        for contatto in da_rimuovere {
-            let Some(altra) = contatto.altra(identita).cloned() else {
+        for relazione in da_rimuovere {
+            let Some(altra) = relazione.altra(identita).cloned() else {
                 continue;
             };
-            self.contatti.remove(&contatto);
+            self.relazioni.remove(&relazione);
             self.rimuovi_intenti_reciproci(identita, &altra);
             if let Ok(sessione) = self.sessione_attiva(&altra) {
                 eventi.push(EventoRelay::Consegna {
                     sessione: sessione.clone(),
-                    evento: EventoSessione::RelazioneCambiata {
+                    evento: EventoSessione::RelazioneTerminata {
                         tacitus_id: identita.clone(),
-                        attiva: false,
                     },
                 });
             }
@@ -103,10 +109,10 @@ impl Relay {
         eventi
     }
 
-    fn snapshot_contatti(&self, identita: &TacitusId, sessione: &SessionId) -> Vec<EventoRelay> {
+    fn snapshot_relazioni(&self, identita: &TacitusId, sessione: &SessionId) -> Vec<EventoRelay> {
         let mut eventi = Vec::new();
-        for contatto in &self.contatti {
-            let Some(altra_id) = contatto.altra(identita) else {
+        for relazione in &self.relazioni {
+            let Some(altra_id) = relazione.altra(identita) else {
                 continue;
             };
             let Some(altra) = self.identita.get(altra_id) else {
@@ -114,7 +120,7 @@ impl Relay {
             };
             eventi.push(EventoRelay::Consegna {
                 sessione: sessione.clone(),
-                evento: EventoSessione::ContattoAssociato {
+                evento: EventoSessione::RelazioneStabilita {
                     tacitus_id: altra_id.clone(),
                     nickname: altra.identita.nickname().to_owned(),
                     online: altra.sessione.attiva(),

@@ -10,6 +10,7 @@ import { parseRelayFrame, type RelayFrame } from './relayFrame';
 type RelayState = 'connecting' | 'online';
 
 type RelayConnectionOptions = {
+  leggiBlocchi: () => TacitusId[];
   onDisconnected: () => void;
   onError: (message: string) => void;
   onFrame: (frame: Exclude<RelayFrame, { tipo: 'conferma' }>) => void;
@@ -28,7 +29,7 @@ export type RelayCommands = {
 
 export type RelayConnection = RelayCommands & {
   close: () => void;
-  connect: (identity: LocalIdentity, blocchi: TacitusId[]) => void;
+  connect: (identity: LocalIdentity) => void;
 };
 
 const errorLabels: Record<string, string> = {
@@ -49,29 +50,32 @@ const socketUrl = () =>
     : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
 
 export const createRelayConnection = ({
+  leggiBlocchi,
   onDisconnected,
   onError,
   onFrame,
   onStateChanged,
 }: RelayConnectionOptions): RelayConnection => {
   let currentIdentity: LocalIdentity | undefined;
-  const currentBlocks = new Set<TacitusId>();
   let reconnectTimer: number | undefined;
   let receiveQueue = Promise.resolve();
+  const richiesteSincronizzazioneBlocchi = new Set<string>();
   let socket: WebSocket | undefined;
 
   const send = (type: string, fields: Record<string, unknown>) => {
     if (socket?.readyState !== WebSocket.OPEN) {
       throw new Error('Connessione non disponibile.');
     }
+    const requestId = crypto.randomUUID();
     socket.send(
       JSON.stringify({
         v: 3,
         type,
-        request_id: crypto.randomUUID(),
+        request_id: requestId,
         ...fields,
       }),
     );
+    return requestId;
   };
 
   const handleFrame = async (value: string, identity: LocalIdentity) => {
@@ -93,7 +97,7 @@ export const createRelayConnection = ({
         JSON.stringify({
           v: 3,
           type: 'contact.blocks.sync',
-          tacitus_ids: [...currentBlocks],
+          tacitus_ids: leggiBlocchi(),
         }),
       );
       return;
@@ -106,15 +110,24 @@ export const createRelayConnection = ({
       onError(
         errorLabels[frame.codice] ?? 'Il server ha rifiutato la richiesta.',
       );
+      if (
+        frame.richiesta &&
+        richiesteSincronizzazioneBlocchi.delete(frame.richiesta)
+      ) {
+        socket?.close();
+      }
       return;
     }
-    if (frame.tipo !== 'conferma') onFrame(frame);
+    if (frame.tipo === 'conferma') {
+      richiesteSincronizzazioneBlocchi.delete(frame.richiesta);
+      return;
+    }
+    onFrame(frame);
   };
 
-  const connect = (identity: LocalIdentity, blocchi: TacitusId[]) => {
+  const connect = (identity: LocalIdentity) => {
     currentIdentity = identity;
-    currentBlocks.clear();
-    blocchi.forEach(tacitusId => currentBlocks.add(tacitusId));
+    richiesteSincronizzazioneBlocchi.clear();
     clearTimeout(reconnectTimer);
     socket?.close();
     onDisconnected();
@@ -132,10 +145,7 @@ export const createRelayConnection = ({
       if (socket !== nextSocket) return;
       onDisconnected();
       if (currentIdentity === identity) {
-        reconnectTimer = window.setTimeout(
-          () => connect(identity, [...currentBlocks]),
-          2_000,
-        );
+        reconnectTimer = window.setTimeout(() => connect(identity), 2_000);
       }
     };
   };
@@ -155,8 +165,9 @@ export const createRelayConnection = ({
     annullaIntento: tacitusId =>
       send('contact.cancel', { tacitus_id: tacitusId }),
     bloccaContatto: tacitusId => {
-      currentBlocks.add(tacitusId);
-      send('contact.block', { tacitus_id: tacitusId });
+      richiesteSincronizzazioneBlocchi.add(
+        send('contact.block', { tacitus_id: tacitusId }),
+      );
     },
     close,
     connect,
@@ -167,8 +178,9 @@ export const createRelayConnection = ({
     rimuoviContatto: tacitusId =>
       send('contact.remove', { tacitus_id: tacitusId }),
     sbloccaContatto: tacitusId => {
-      currentBlocks.delete(tacitusId);
-      send('contact.unblock', { tacitus_id: tacitusId });
+      richiesteSincronizzazioneBlocchi.add(
+        send('contact.unblock', { tacitus_id: tacitusId }),
+      );
     },
   };
 };

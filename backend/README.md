@@ -8,7 +8,7 @@ Il protocollo completo, inclusi autenticazione, handshake, Double Ratchet e fram
 
 ## Architettura
 
-Il dominio contiene Identità, Sessioni, Intenti, Contatti e Blocchi senza dipendenze da Axum, Tokio o Serde. Un `RelayActor` centrale possiede lo stato volatile e riceve comandi attraverso una mailbox limitata; ogni WebSocket autenticato ha un `ActorSessione` con una propria mailbox limitata. Gli adapter traducono protocollo V3, autenticazione crittografica, timer e trasporto nelle porte applicative.
+Il dominio contiene Identità, Sessioni, Intenti, Relazioni e Blocchi senza dipendenze da Axum, Tokio o Serde. Un `RelayActor` centrale possiede lo stato volatile e riceve comandi attraverso una mailbox limitata; ogni WebSocket autenticato ha un `ActorSessione` con una propria mailbox limitata. Gli adapter traducono protocollo V3, autenticazione crittografica, timer e trasporto nelle porte applicative.
 
 Una sessione lenta viene chiusa senza bloccare il relay. Se la mailbox centrale è satura, il client riceve `server_busy`. Un arresto inatteso del `RelayActor` termina il processo affinché K3s lo riavvii.
 

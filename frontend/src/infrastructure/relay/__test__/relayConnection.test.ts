@@ -56,6 +56,7 @@ describe('Connessione Relay', () => {
     const frames: unknown[] = [];
     const { createRelayConnection } = await import('../relayConnection');
     const relay = createRelayConnection({
+      leggiBlocchi: () => [identity.tacitusId],
       onDisconnected: vi.fn(),
       onError: vi.fn(),
       onFrame: frame => frames.push(frame),
@@ -63,7 +64,7 @@ describe('Connessione Relay', () => {
     });
 
     // When
-    relay.connect(identity, []);
+    relay.connect(identity);
     const socket = FakeWebSocket.instances[0];
     socket.onmessage?.({
       data: JSON.stringify({
@@ -90,6 +91,17 @@ describe('Connessione Relay', () => {
     });
     await flushEvents();
     relay.aggiungiContatto(identity.tacitusId);
+    relay.bloccaContatto(identity.tacitusId);
+    const richiestaBlocco = JSON.parse(socket.sent[3]).request_id;
+    socket.onmessage?.({
+      data: JSON.stringify({
+        v: 3,
+        type: 'error',
+        request_id: richiestaBlocco,
+        code: 'server_busy',
+      }),
+    });
+    await flushEvents();
 
     // Then
     expect(socket.url).toBe('ws://localhost:5173/ws');
@@ -101,11 +113,16 @@ describe('Connessione Relay', () => {
       'auth.respond',
       'contact.blocks.sync',
       'contact.add',
+      'contact.block',
+    ]);
+    expect(JSON.parse(socket.sent[1]).tacitus_ids).toEqual([
+      identity.tacitusId,
     ]);
     expect(JSON.parse(socket.sent[2])).toMatchObject({
       v: 3,
       type: 'contact.add',
       tacitus_id: identity.tacitusId,
     });
+    expect(socket.readyState).toBe(3);
   });
 });

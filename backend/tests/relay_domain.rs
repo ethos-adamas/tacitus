@@ -1,9 +1,9 @@
 use tacitus_backend::{
     application::relay::{ComandoRelay, ErroreRelay, EventoRelay, EventoSessione, Relay},
     domain::{
-        contatti::Blocco,
         identita::{IdentitaAutenticata, TacitusId},
         relay::{CorpoCifrato, RichiestaId, TipoPayload},
+        relazioni::Blocco,
         sessioni::SessionId,
     },
 };
@@ -31,17 +31,11 @@ fn registra(
     sessione: SessionId,
     blocchi: Vec<Blocco>,
 ) {
-    relay
-        .esegui(ComandoRelay::RegistraSessione {
-            identita,
-            sessione,
-            blocchi,
-        })
-        .unwrap();
+    relay.registra(identita, sessione, blocchi).unwrap();
 }
 
 #[test]
-fn il_consenso_reciproco_crea_un_contatto_e_permette_il_relay() {
+fn il_consenso_reciproco_crea_una_relazione_e_permette_il_relay() {
     // Given
     let mut relay = Relay::default();
     let alice = identita(1, "Alice");
@@ -85,7 +79,7 @@ fn il_consenso_reciproco_crea_un_contatto_e_permette_il_relay() {
             .filter(|evento| matches!(
                 evento,
                 EventoRelay::Consegna {
-                    evento: EventoSessione::ContattoAssociato { .. },
+                    evento: EventoSessione::RelazioneStabilita { .. },
                     ..
                 }
             ))
@@ -190,4 +184,35 @@ fn un_blocco_elimina_la_relazione_e_nasconde_il_motivo_al_bloccato() {
 
     // Then
     assert_eq!(nuovo_intento, Err(ErroreRelay::ContattoNonDisponibile));
+}
+
+#[test]
+fn la_sincronizzazione_di_un_blocco_elimina_gli_intenti_pendenti() {
+    // Given
+    let mut relay = Relay::default();
+    let alice = identita(1, "Alice");
+    let bob = identita(2, "Bob");
+    let alice_id = alice.tacitus_id().clone();
+    let bob_id = bob.tacitus_id().clone();
+    let alice_sessione = sessione("alice-session");
+    let bob_sessione = sessione("bob-session");
+    registra(&mut relay, bob, bob_sessione.clone(), vec![]);
+    relay
+        .esegui(ComandoRelay::CreaIntento {
+            sessione: bob_sessione.clone(),
+            richiesta: richiesta("contact-alice"),
+            destinatario: alice_id.clone(),
+        })
+        .unwrap();
+
+    // When
+    registra(
+        &mut relay,
+        alice,
+        alice_sessione,
+        vec![Blocco::new(alice_id.clone(), bob_id)],
+    );
+
+    // Then
+    assert!(!relay.ha_intento(&bob_sessione, &alice_id));
 }

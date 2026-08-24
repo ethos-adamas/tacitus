@@ -16,16 +16,15 @@ pub enum EventoSessione {
         richiesta: Option<RichiestaId>,
         tacitus_id: TacitusId,
     },
-    ContattoAssociato {
+    RelazioneStabilita {
         tacitus_id: TacitusId,
         nickname: String,
         online: bool,
     },
-    RelazioneCambiata {
+    RelazioneTerminata {
         tacitus_id: TacitusId,
-        attiva: bool,
     },
-    ContattoRimosso {
+    RelazioneRimossa {
         richiesta: RichiestaId,
         tacitus_id: TacitusId,
     },

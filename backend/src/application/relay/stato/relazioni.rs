@@ -1,9 +1,9 @@
 use crate::{
     application::relay::{ErroreRelay, EventoRelay, EventoSessione},
     domain::{
-        contatti::{Blocco, Contatto, IntentoDiContatto},
         identita::TacitusId,
         relay::{CorpoCifrato, RichiestaId, TipoPayload},
+        relazioni::{Blocco, IntentoDiContatto, Relazione},
         sessioni::SessionId,
     },
 };
@@ -26,8 +26,8 @@ impl Relay {
         if self.esiste_blocco(&mittente, &destinatario) {
             return Err(ErroreRelay::ContattoNonDisponibile);
         }
-        let contatto = Contatto::new(mittente.clone(), destinatario.clone());
-        if self.contatti.contains(&contatto) {
+        let relazione = Relazione::new(mittente.clone(), destinatario.clone());
+        if self.relazioni.contains(&relazione) {
             return self.snapshot_relazione(sessione, &destinatario);
         }
         if self
@@ -56,7 +56,7 @@ impl Relay {
                 },
             }]);
         }
-        self.contatti.insert(contatto);
+        self.relazioni.insert(relazione);
         self.rimuovi_intenti_reciproci(&mittente, &destinatario);
         let destinatario_runtime = self
             .identita
@@ -69,7 +69,7 @@ impl Relay {
         Ok(vec![
             EventoRelay::Consegna {
                 sessione: sessione.clone(),
-                evento: EventoSessione::ContattoAssociato {
+                evento: EventoSessione::RelazioneStabilita {
                     tacitus_id: destinatario.clone(),
                     nickname: destinatario_runtime.identita.nickname().to_owned(),
                     online: true,
@@ -77,7 +77,7 @@ impl Relay {
             },
             EventoRelay::Consegna {
                 sessione: destinatario_runtime.sessione.id().clone(),
-                evento: EventoSessione::ContattoAssociato {
+                evento: EventoSessione::RelazioneStabilita {
                     tacitus_id: mittente,
                     nickname: mittente_runtime.identita.nickname().to_owned(),
                     online: true,
@@ -98,14 +98,13 @@ impl Relay {
         Ok(vec![
             EventoRelay::Consegna {
                 sessione: sessione.clone(),
-                evento: EventoSessione::RelazioneCambiata {
+                evento: EventoSessione::RelazioneTerminata {
                     tacitus_id: destinatario.clone(),
-                    attiva: false,
                 },
             },
             EventoRelay::Consegna {
                 sessione: sessione.clone(),
-                evento: EventoSessione::ContattoRimosso {
+                evento: EventoSessione::RelazioneRimossa {
                     richiesta,
                     tacitus_id: destinatario,
                 },
@@ -113,19 +112,19 @@ impl Relay {
         ])
     }
 
-    pub(super) fn rimuovi_contatto(
+    pub(super) fn rimuovi_relazione(
         &mut self,
         sessione: &SessionId,
         richiesta: RichiestaId,
         destinatario: TacitusId,
     ) -> Result<Vec<EventoRelay>, ErroreRelay> {
         let mittente = self.identita_della_sessione(sessione)?.clone();
-        self.contatti
-            .remove(&Contatto::new(mittente.clone(), destinatario.clone()));
+        self.relazioni
+            .remove(&Relazione::new(mittente.clone(), destinatario.clone()));
         self.rimuovi_intenti_reciproci(&mittente, &destinatario);
         let mut eventi = vec![EventoRelay::Consegna {
             sessione: sessione.clone(),
-            evento: EventoSessione::ContattoRimosso {
+            evento: EventoSessione::RelazioneRimossa {
                 richiesta,
                 tacitus_id: destinatario.clone(),
             },
@@ -133,9 +132,8 @@ impl Relay {
         if let Ok(sessione_destinatario) = self.sessione_attiva(&destinatario) {
             eventi.push(EventoRelay::Consegna {
                 sessione: sessione_destinatario.clone(),
-                evento: EventoSessione::RelazioneCambiata {
+                evento: EventoSessione::RelazioneTerminata {
                     tacitus_id: mittente,
-                    attiva: false,
                 },
             });
         }
@@ -154,8 +152,8 @@ impl Relay {
         }
         self.blocchi
             .insert(Blocco::new(mittente.clone(), destinatario.clone()));
-        self.contatti
-            .remove(&Contatto::new(mittente.clone(), destinatario.clone()));
+        self.relazioni
+            .remove(&Relazione::new(mittente.clone(), destinatario.clone()));
         self.rimuovi_intenti_reciproci(&mittente, &destinatario);
         let mut eventi = vec![EventoRelay::Consegna {
             sessione: sessione.clone(),
@@ -167,9 +165,8 @@ impl Relay {
         if let Ok(sessione_destinatario) = self.sessione_attiva(&destinatario) {
             eventi.push(EventoRelay::Consegna {
                 sessione: sessione_destinatario.clone(),
-                evento: EventoSessione::RelazioneCambiata {
+                evento: EventoSessione::RelazioneTerminata {
                     tacitus_id: mittente,
-                    attiva: false,
                 },
             });
         }
@@ -204,8 +201,8 @@ impl Relay {
     ) -> Result<Vec<EventoRelay>, ErroreRelay> {
         let mittente = self.identita_della_sessione(&sessione)?.clone();
         if !self
-            .contatti
-            .contains(&Contatto::new(mittente.clone(), destinatario.clone()))
+            .relazioni
+            .contains(&Relazione::new(mittente.clone(), destinatario.clone()))
             || self.esiste_blocco(&mittente, &destinatario)
         {
             return Err(ErroreRelay::ContattoNonDisponibile);
@@ -234,7 +231,7 @@ impl Relay {
             .ok_or(ErroreRelay::ContattoNonDisponibile)?;
         Ok(vec![EventoRelay::Consegna {
             sessione: sessione.clone(),
-            evento: EventoSessione::ContattoAssociato {
+            evento: EventoSessione::RelazioneStabilita {
                 tacitus_id: destinatario.clone(),
                 nickname: runtime.identita.nickname().to_owned(),
                 online: runtime.sessione.attiva(),
