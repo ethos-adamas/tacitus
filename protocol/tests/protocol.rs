@@ -113,3 +113,44 @@ fn plaintext_is_hidden_in_fixed_padding_buckets() {
     assert_eq!(PeerSession::encrypted_body_len(&medium).unwrap(), 512 + 16);
     assert!(alice.encrypt(&"😀".repeat(4_001), 3).is_err());
 }
+
+#[test]
+fn contenuto_album_cifrato_distinto_dal_testo_e_limitato_a_un_chunk() {
+    // Given
+    let (mut alice, mut bob) = connected();
+    let content = format!(
+        "{{\"kind\":\"album.chunk\",\"data\":\"{}\"}}",
+        "a".repeat(24_000)
+    );
+    // When
+    let encrypted = alice.encrypt_content(&content, 9).unwrap();
+    let decrypted = bob.decrypt(&encrypted).unwrap();
+    // Then
+    assert_eq!(decrypted.content.as_deref(), Some(content.as_str()));
+    assert_eq!(decrypted.text, "");
+    assert_eq!(
+        PeerSession::encrypted_body_len(&encrypted).unwrap(),
+        32_768 + 16
+    );
+    assert!(bob.decrypt(&encrypted).is_err());
+    assert!(alice.encrypt_content(&"x".repeat(32_001), 9).is_err());
+    let text = alice.encrypt("testo dopo Album", 10).unwrap();
+    assert_eq!(bob.decrypt(&text).unwrap().text, "testo dopo Album");
+}
+
+#[test]
+fn webp_portabile_preserva_i_pixel_e_rifiuta_dimensioni_non_valide() {
+    // Given
+    let pixels = [255, 0, 0, 255, 0, 0, 255, 128];
+    // When
+    let encoded = tacitus_protocol::encode_webp(&pixels, 2, 1).unwrap();
+    // Then
+    assert_eq!(&encoded[8..12], b"WEBP");
+    let mut decoder = image_webp::WebPDecoder::new(std::io::Cursor::new(&encoded)).unwrap();
+    let mut decoded = vec![0; decoder.output_buffer_size().unwrap()];
+    decoder.read_image(&mut decoded).unwrap();
+    assert_eq!(decoded, pixels);
+    assert!(tacitus_protocol::encode_webp(&pixels, 2049, 1).is_err());
+    assert!(tacitus_protocol::encode_webp(&pixels, 2, 0).is_err());
+    assert!(tacitus_protocol::encode_webp(&pixels, 1, 1).is_err());
+}

@@ -5,4 +5,5 @@ export type Messaggio = {
   direzione: 'ricevuto' | 'inviato';
   testo: string;
   creatoIl: number;
+  album?: { id: string; count: number };
 };

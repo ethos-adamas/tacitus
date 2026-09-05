@@ -33,11 +33,14 @@ async fn esegui() -> Result<(), Box<dyn std::error::Error>> {
     let listener = TcpListener::bind(indirizzo).await?;
     let (arresto, mut arresto_ricevuto) = watch::channel(false);
     let mut server = tokio::spawn(async move {
-        axum::serve(listener, router)
-            .with_graceful_shutdown(async move {
-                let _ = arresto_ricevuto.changed().await;
-            })
-            .await
+        axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .with_graceful_shutdown(async move {
+            let _ = arresto_ricevuto.changed().await;
+        })
+        .await
     });
     info!(evento = "backend_avviato", %indirizzo, protocollo = 3);
 

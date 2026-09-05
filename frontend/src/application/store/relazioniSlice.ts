@@ -62,6 +62,7 @@ const relazioniSlice = createSlice({
         if (relazione) relazione.stato = 'da-riattivare';
       })
       .addCase(relayConnesso, state => {
+        state.intenti = {};
         Object.values(state.relazioni).forEach(relazione => {
           relazione.stato = 'da-riattivare';
         });

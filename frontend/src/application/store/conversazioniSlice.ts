@@ -79,7 +79,7 @@ const conversazioniSlice = createSlice({
         ) {
           conversazione.messaggi.push(payload.messaggio);
         }
-        conversazione.bozza = '';
+        if (!payload.messaggio.album) conversazione.bozza = '';
       });
   },
 });

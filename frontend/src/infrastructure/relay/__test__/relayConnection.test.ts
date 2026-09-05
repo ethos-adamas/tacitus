@@ -125,4 +125,47 @@ describe('Connessione Relay', () => {
     });
     expect(socket.readyState).toBe(3);
   });
+  it('scarta firma e frame della vecchia connessione dopo la riconnessione', async () => {
+    // Given
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+    const { authenticationSignature } =
+      await import('../../identity/identityProvider');
+    let complete!: (signature: Uint8Array) => void;
+    vi.mocked(authenticationSignature).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          complete = resolve;
+        }),
+    );
+    const { createRelayConnection } = await import('../relayConnection');
+    const onFrame = vi.fn();
+    const relay = createRelayConnection({
+      leggiBlocchi: () => [],
+      onDisconnected: vi.fn(),
+      onError: vi.fn(),
+      onFrame,
+      onStateChanged: vi.fn(),
+    });
+    relay.connect(identity);
+    const old = FakeWebSocket.instances[0];
+    old.onmessage?.({
+      data: JSON.stringify({ v: 3, type: 'auth.challenge', nonce: 'old' }),
+    });
+    await flushEvents();
+    old.onmessage?.({
+      data: JSON.stringify({
+        v: 3,
+        type: 'contact.pending',
+        tacitus_id: identity.tacitusId,
+      }),
+    });
+    // When
+    relay.connect(identity);
+    complete(new Uint8Array([3]));
+    await flushEvents();
+    // Then
+    expect(FakeWebSocket.instances[1].sent).toEqual([]);
+    expect(onFrame).not.toHaveBeenCalled();
+    relay.close();
+  });
 });

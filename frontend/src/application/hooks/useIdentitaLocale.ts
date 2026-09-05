@@ -1,3 +1,5 @@
+import { annullaAlbum } from '../album/trasferimentiAlbum';
+import { preferenzeAlbumCaricate } from '../store/albumSlice';
 import { useEffect } from 'react';
 import { conversazioniCaricate } from '../store/conversazioniSlice';
 import { erroreMostrato } from '../store/feedbackSlice';
@@ -39,6 +41,8 @@ export const useIdentitaLocale = (): void => {
         if (!active) return;
         memorizzaIdentitaLocale(identity);
         if (persisted) {
+          if (persisted.album)
+            dispatch(preferenzeAlbumCaricate(persisted.album));
           dispatch(relazioniCaricate(persisted.relazioni));
           dispatch(conversazioniCaricate(persisted.conversazioni));
         }
@@ -82,6 +86,7 @@ export const useGestioneIdentitaLocale = () => {
 
   const cancella = async () => {
     leggiIdentitaLocale();
+    annullaAlbum();
     await clearLocalData();
     rimuoviIdentitaLocale();
     location.reload();

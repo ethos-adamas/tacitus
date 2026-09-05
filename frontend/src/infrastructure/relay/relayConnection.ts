@@ -40,7 +40,8 @@ const errorLabels: Record<string, string> = {
   payload_too_large: 'Dati inviati troppo grandi.',
   server_busy: 'Server temporaneamente occupato.',
   server_unavailable: 'Server temporaneamente non disponibile.',
-  too_many_contacts: 'Troppi Intenti di contatto aperti.',
+  too_many_contacts:
+    'Puoi avere al massimo 5 Intenti in attesa. Annullane uno prima di aggiungerne un altro.',
 };
 
 const socketUrl = () =>
@@ -58,7 +59,6 @@ export const createRelayConnection = ({
 }: RelayConnectionOptions): RelayConnection => {
   let currentIdentity: LocalIdentity | undefined;
   let reconnectTimer: number | undefined;
-  let receiveQueue = Promise.resolve();
   const richiesteModificaBlocchiPendenti = new Set<string>();
   let socket: WebSocket | undefined;
 
@@ -78,11 +78,20 @@ export const createRelayConnection = ({
     return requestId;
   };
 
-  const handleFrame = async (value: string, identity: LocalIdentity) => {
+  const handleFrame = async (
+    value: string,
+    identity: LocalIdentity,
+    source: WebSocket,
+  ) => {
+    if (socket !== source || source.readyState !== WebSocket.OPEN) return;
     const frame = parseRelayFrame(value);
     if (frame.tipo === 'autenticazione-richiesta') {
       const signature = await authenticationSignature(identity, frame.nonce);
-      if (currentIdentity !== identity || socket?.readyState !== WebSocket.OPEN)
+      if (
+        currentIdentity !== identity ||
+        socket !== source ||
+        source.readyState !== WebSocket.OPEN
+      )
         return;
       socket.send(
         JSON.stringify({
@@ -135,14 +144,20 @@ export const createRelayConnection = ({
 
     const nextSocket = new WebSocket(socketUrl());
     socket = nextSocket;
+    let receiveQueue = Promise.resolve();
     nextSocket.onmessage = ({ data }) => {
       receiveQueue = receiveQueue
-        .then(() => handleFrame(String(data), identity))
-        .catch(() => onError('Frame ricevuto non valido.'));
+        .then(() => handleFrame(String(data), identity, nextSocket))
+        .catch(() => {
+          if (socket === nextSocket) onError('Frame ricevuto non valido.');
+        });
     };
-    nextSocket.onerror = () => onError('Connessione al server non riuscita.');
+    nextSocket.onerror = () => {
+      if (socket === nextSocket) onError('Connessione al server non riuscita.');
+    };
     nextSocket.onclose = () => {
       if (socket !== nextSocket) return;
+      socket = undefined;
       onDisconnected();
       if (currentIdentity === identity) {
         reconnectTimer = window.setTimeout(() => connect(identity), 2_000);

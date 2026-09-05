@@ -1,0 +1,39 @@
+name: Release title
+on:
+  release:
+    types: [published, edited]
+  pull_request:
+    paths: ['.github/scripts/release-title.mjs', '.github/scripts/__test__/**', '.github/workflows/release-title.yml']
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'release' && github.event.repository.default_branch || github.sha }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: node --test .github/scripts/__test__/release-title.test.mjs
+  title:
+    needs: check
+    if: github.event_name == 'release'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'release' && github.event.repository.default_branch || github.sha }}
+      - run: |
+          title=$(node .github/scripts/release-title.mjs "$RELEASE_TAG")
+          if [ "$RELEASE_TITLE" != "$title" ]; then
+            gh release edit "$RELEASE_TAG" --title "$title"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TITLE: ${{ github.event.release.name }}

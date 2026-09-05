@@ -28,6 +28,7 @@ describe('ricezione dei Messaggi cifrati', () => {
     const middleware = createListenerMiddleware();
     const sessioni: GestoreSessioniSicure = {
       avvia: vi.fn(),
+      cifraContenuto: vi.fn(),
       cifra: vi.fn(),
       decifra: () => ({
         message_id: 'message-one',
@@ -83,6 +84,7 @@ describe('ricezione dei Messaggi cifrati', () => {
     const middleware = createListenerMiddleware();
     const sessioni: GestoreSessioniSicure = {
       avvia: vi.fn(),
+      cifraContenuto: vi.fn(),
       cifra: vi.fn(() => 'ciphertext'),
       decifra: vi.fn(),
       elimina: vi.fn(),

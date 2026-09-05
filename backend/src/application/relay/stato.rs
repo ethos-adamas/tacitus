@@ -28,6 +28,17 @@ pub struct Relay {
 }
 
 impl Relay {
+    fn conserva_intento(&mut self, da: TacitusId, verso: TacitusId) -> Result<(), ErroreRelay> {
+        let intento = IntentoDiContatto::new(da.clone(), verso);
+        if !self.intenti.contains(&intento)
+            && self.intenti.iter().filter(|i| i.da == da).count() >= 5
+        {
+            return Err(ErroreRelay::TroppiIntenti);
+        }
+        self.intenti.insert(intento);
+        Ok(())
+    }
+
     pub fn esegui(&mut self, comando: ComandoRelay) -> Result<Vec<EventoRelay>, ErroreRelay> {
         match comando {
             ComandoRelay::Disconnetti { sessione } => self.disconnetti(&sessione),

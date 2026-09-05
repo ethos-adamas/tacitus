@@ -1,3 +1,5 @@
+import { registerAlbumListeners } from '../album/trasferimentiAlbum';
+import { albumReducer } from './albumSlice';
 import { configureStore } from '@reduxjs/toolkit';
 import { registerMessaggiListeners } from '../listeners/messaggiListeners';
 import { registerNotificheListeners } from '../listeners/notificheListeners';
@@ -16,6 +18,7 @@ import { temaReducer } from './temaSlice';
 import { listenerMiddleware } from './listenerMiddleware';
 
 const reducers = {
+  album: albumReducer,
   connessioneRelay: connessioneRelayReducer,
   conversazioni: conversazioniReducer,
   feedback: feedbackReducer,
@@ -48,6 +51,8 @@ export const store = configureStore({
   middleware: getDefaultMiddleware =>
     getDefaultMiddleware().prepend(listenerMiddleware.middleware),
 });
+
+registerAlbumListeners(listenerMiddleware.startListening, store);
 
 export type AppDispatch = typeof store.dispatch;
 export type AppStore = typeof store;

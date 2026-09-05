@@ -10,9 +10,15 @@ export type MessaggioDecifrato = {
   message_id: string;
   created_at: number;
   text: string;
+  content?: string;
 };
 
 export type GestoreSessioniSicure = {
+  cifraContenuto: (
+    tacitusId: TacitusId,
+    contenuto: string,
+    creatoIl: number,
+  ) => string;
   cifra: (tacitusId: TacitusId, testo: string, creatoIl: number) => string;
   decifra: (tacitusId: TacitusId, body: string) => MessaggioDecifrato;
   elimina: (tacitusId: TacitusId) => void;
@@ -37,7 +43,8 @@ const parseMessaggioDecifrato = (value: string): MessaggioDecifrato => {
     typeof parsed.created_at !== 'number' ||
     !Number.isFinite(parsed.created_at) ||
     !('text' in parsed) ||
-    typeof parsed.text !== 'string'
+    typeof parsed.text !== 'string' ||
+    ('content' in parsed && typeof parsed.content !== 'string')
   ) {
     throw new Error('Messaggio decifrato non valido.');
   }
@@ -45,6 +52,9 @@ const parseMessaggioDecifrato = (value: string): MessaggioDecifrato => {
     message_id: parsed.message_id,
     created_at: parsed.created_at,
     text: parsed.text,
+    ...('content' in parsed && typeof parsed.content === 'string'
+      ? { content: parsed.content }
+      : {}),
   };
 };
 
@@ -80,8 +90,8 @@ export const createSessioniSicure = (
     tacitusId: TacitusId,
     body: string,
   ) => {
+    let sessione = sessioni.get(tacitusId);
     try {
-      let sessione = sessioni.get(tacitusId);
       if (!sessione) {
         if (JSON.parse(body).type !== 'offer') {
           throw new Error('Offerta di handshake mancante.');
@@ -96,10 +106,15 @@ export const createSessioniSicure = (
         sessione.receiveHandshake(body);
       }
       const payload = sessione.signaturePayload();
-      if (payload) sessione.completeSignature(await sign(identita, payload));
+      if (payload) {
+        const signature = await sign(identita, payload);
+        if (sessioni.get(tacitusId) !== sessione) return { pronta: false };
+        sessione.completeSignature(signature);
+      }
       inviaInUscita(tacitusId, sessione);
       return { nickname: sessione.peerNickname, pronta: sessione.ready };
     } catch (reason) {
+      if (sessioni.get(tacitusId) !== sessione) return { pronta: false };
       elimina(tacitusId);
       throw reason;
     }
@@ -114,11 +129,30 @@ export const createSessioniSicure = (
     return sessione.encrypt(testo, BigInt(creatoIl));
   };
 
+  const cifraContenuto = (
+    tacitusId: TacitusId,
+    contenuto: string,
+    creatoIl: number,
+  ) => {
+    const sessione = sessioni.get(tacitusId);
+    if (!sessione?.ready) throw new Error('Sessione sicura assente.');
+    return sessione.encryptContent(contenuto, BigInt(creatoIl));
+  };
+
   const decifra = (tacitusId: TacitusId, body: string) => {
     const sessione = sessioni.get(tacitusId);
     if (!sessione?.ready) throw new Error('Sessione sicura assente.');
     return parseMessaggioDecifrato(sessione.decrypt(body));
   };
 
-  return { avvia, cifra, decifra, elimina, eliminaTutte, pronta, ricevi };
+  return {
+    avvia,
+    cifra,
+    cifraContenuto,
+    decifra,
+    elimina,
+    eliminaTutte,
+    pronta,
+    ricevi,
+  };
 };

@@ -55,6 +55,7 @@ const ConversationRow = ({
   stato,
   tacitusId,
 }: ConversationRowProps) => {
+  const fotoInAttesa = useSelector(state => !!state.album.offerte[tacitusId]);
   const select = () => onSelect(tacitusId);
   return (
     <button className={`contact ${attiva ? 'selected' : ''}`} onClick={select}>
@@ -62,6 +63,7 @@ const ConversationRow = ({
       <span>
         <strong>{nickname}</strong>
         <small>{statusLabel[stato]}</small>
+        {fotoInAttesa && <small>Foto da accettare</small>}
       </span>
       {nonLetti > 0 && <b className="unread">{nonLetti}</b>}
     </button>

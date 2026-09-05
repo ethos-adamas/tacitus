@@ -1,3 +1,5 @@
+import { AlbumComposer, AlbumConsent, AlbumGallery } from './Album';
+import type { TacitusId } from '../../domain/tacitusId';
 import { useEffect, useRef } from 'react';
 import { useConversazioneAttiva } from '../../application/hooks/useConversazioneAttiva';
 import { useRelazioni } from '../../application/hooks/useRelazioni';
@@ -9,12 +11,16 @@ import { MAX_MESSAGE_LENGTH, type Messaggio } from '../../domain/messaggi';
 import type { Contatto, Relazione } from '../../domain/relazioni';
 import EmojiComposer from '../emoji/EmojiComposer';
 
-type MessageProps = { message: Messaggio };
+type MessageProps = { message: Messaggio; tacitusId: TacitusId };
 
-const Message = ({ message }: MessageProps) => (
+const Message = ({ message, tacitusId }: MessageProps) => (
   <article
     className={`message ${message.direzione === 'ricevuto' ? 'incoming' : 'outgoing'}`}>
-    <p>{message.testo}</p>
+    {message.album ? (
+      <AlbumGallery tacitusId={tacitusId} id={message.album.id} />
+    ) : (
+      <p>{message.testo}</p>
+    )}
     <time>
       {new Date(message.creatoIl).toLocaleTimeString([], {
         hour: '2-digit',
@@ -61,7 +67,8 @@ const ConversationContent = ({
   };
 
   useEffect(() => {
-    messagesEnd.current?.scrollIntoView();
+    const history = messagesEnd.current?.parentElement;
+    if (history) history.scrollTop = history.scrollHeight;
   }, [conversation.messaggi]);
 
   return (
@@ -75,6 +82,10 @@ const ConversationContent = ({
           <h2>{contact.nickname}</h2>
           <code>{contact.tacitusId}</code>
         </div>
+        <details className="contact-settings">
+          <summary aria-label="Impostazioni del Contatto">⚙</summary>
+          <AlbumConsent tacitusId={contact.tacitusId} />
+        </details>
         {relationship.stato === 'da-riattivare' && !contactIntentPending && (
           <button disabled={connection !== 'online'} onClick={reactivate}>
             Riattiva
@@ -92,24 +103,35 @@ const ConversationContent = ({
           <p className="empty">La Conversazione è vuota.</p>
         )}
         {conversation.messaggi.map(message => (
-          <Message key={message.id} message={message} />
+          <Message
+            key={message.id}
+            message={message}
+            tacitusId={contact.tacitusId}
+          />
         ))}
         <div ref={messagesEnd} />
       </div>
-      <EmojiComposer
-        key={contact.tacitusId}
-        value={conversation.bozza}
-        maxLength={MAX_MESSAGE_LENGTH}
-        placeholder={
-          secureSession === 'pronta'
-            ? 'Scrivi un messaggio'
-            : 'Il Contatto deve essere online'
-        }
-        disabled={secureSession !== 'pronta'}
-        theme={theme}
-        onChange={aggiornaBozza}
-        onSend={invia}
-      />
+      <div className="conversation-composer">
+        <AlbumComposer
+          key={`album-${contact.tacitusId}`}
+          tacitusId={contact.tacitusId}
+          disabled={secureSession !== 'pronta'}
+        />
+        <EmojiComposer
+          key={contact.tacitusId}
+          value={conversation.bozza}
+          maxLength={MAX_MESSAGE_LENGTH}
+          placeholder={
+            secureSession === 'pronta'
+              ? 'Scrivi un messaggio'
+              : 'Il Contatto deve essere online'
+          }
+          disabled={secureSession !== 'pronta'}
+          theme={theme}
+          onChange={aggiornaBozza}
+          onSend={invia}
+        />
+      </div>
     </>
   );
 };

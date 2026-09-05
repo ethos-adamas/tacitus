@@ -61,3 +61,17 @@ npm run build
 ```
 
 I vettori di interoperabilità handshake/ratchet sono testati nativamente in `protocol/tests/protocol.rs`. Vitest copre dominio, reducer, listener, adapter e UI; Playwright esercita gli use case completi contro il Relay locale su Chromium desktop e viewport mobile.
+
+## Versione e interfaccia
+
+`package.json` è la fonte della versione mostrata nel brand e della versione dell'app Tauri (`src-tauri/tauri.conf.json` la legge direttamente). Il brand resta visibile su mobile. Tema, notifiche e cancellazione dati sono raccolti sotto l'ingranaggio Impostazioni.
+
+La chat segue la viewport visibile, comprese le variazioni della tastiera; scorre soltanto la cronologia. Il componente emoji richiede stili inline, autorizzati dalla policy CSS di Nginx come già avviene in Tauri; la policy degli script resta invariata.
+
+Tacitus non gestisce lo spazio del dispositivo: nessuna quota applicativa, monitoraggio dello spazio o cancellazione automatica. Gli errori di quota vengono segnalati esplicitamente; ogni salvataggio attende il commit IndexedDB prima di considerarsi riuscito.
+
+## Album e riattivazione
+
+La scelta multipla delle foto mostra anteprime annullabili prima dell'invio. Il consenso iniziale, la revoca per Contatto e l'interruttore globale sono descritti nel [protocollo Album](../README.md#foto-album-e-consenso). I test browser coprono anche un mittente che tenta di anticipare il consenso, WebP corrotti, mancanza di spazio, indici locali opachi, persistenza dopo reload e cancellazione.
+
+La riattivazione conserva Contatto e Conversazione. Una conferma ripetuta di una Relazione non riporta una Sessione pronta in negoziazione; frame, firme e callback di una vecchia connessione vengono scartati dopo la riconnessione. Il test di chiusura di entrambi i client attende oltre i 30 secondi di tolleranza del relay e verifica lo scambio senza rimuovere i Contatti. Non viene introdotta una scadenza di 30 secondi agli Intenti nuovi.

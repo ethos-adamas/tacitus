@@ -22,7 +22,9 @@ const sessioniSicureSlice = createSlice({
   extraReducers: builder => {
     builder
       .addCase(contattoAssociato, (state, { payload }) => {
-        state[payload.tacitusId] = payload.online ? 'negoziazione' : 'assente';
+        if (!payload.online) state[payload.tacitusId] = 'assente';
+        else if (state[payload.tacitusId] !== 'pronta')
+          state[payload.tacitusId] = 'negoziazione';
       })
       .addCase(sessioneSicuraInNegoziazione, (state, { payload }) => {
         state[payload] = 'negoziazione';
@@ -31,7 +33,9 @@ const sessioniSicureSlice = createSlice({
         state[payload] = 'pronta';
       })
       .addCase(presenzaContattoCambiata, (state, { payload }) => {
-        state[payload.tacitusId] = payload.online ? 'negoziazione' : 'assente';
+        if (!payload.online) state[payload.tacitusId] = 'assente';
+        else if (state[payload.tacitusId] !== 'pronta')
+          state[payload.tacitusId] = 'negoziazione';
       })
       .addCase(relazioneDisattivata, (state, { payload }) => {
         state[payload] = 'assente';

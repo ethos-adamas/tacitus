@@ -1,3 +1,4 @@
+import { riceviAlbum } from '../album/trasferimentiAlbum';
 import {
   invioMessaggioRichiesto,
   messaggioCifratoRicevuto,
@@ -60,9 +61,13 @@ export const registerMessaggiListeners = (
 
   startListening({
     actionCreator: messaggioCifratoRicevuto,
-    effect: ({ payload }, { dispatch }) => {
+    effect: async ({ payload }, { dispatch }) => {
       try {
         const message = sessioni.decifra(payload.tacitusId, payload.body);
+        if (message.content !== undefined) {
+          await riceviAlbum(payload.tacitusId, message.content);
+          return;
+        }
         dispatch(
           messaggioRicevuto({
             tacitusId: payload.tacitusId,

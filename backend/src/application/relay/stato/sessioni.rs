@@ -4,7 +4,6 @@ use crate::{
     application::relay::{ErroreRelay, EventoRelay, EventoSessione},
     domain::{
         identita::TacitusId,
-        relazioni::IntentoDiContatto,
         sessioni::{Presenza, SessionId, StatoSessione},
     },
 };
@@ -63,8 +62,7 @@ impl Relay {
             };
             self.relazioni.remove(&relazione);
             if let Ok(sessione_altra) = self.sessione_attiva(&altra).cloned() {
-                self.intenti
-                    .insert(IntentoDiContatto::new(altra.clone(), identita.clone()));
+                let _ = self.conserva_intento(altra.clone(), identita.clone());
                 eventi.push(EventoRelay::Consegna {
                     sessione: sessione_altra,
                     evento: EventoSessione::RelazioneTerminata {
