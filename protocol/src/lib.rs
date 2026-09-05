@@ -1,5 +1,8 @@
 //! Protocollo crittografico Tacitus V2 condiviso da Web, mobile e test nativi.
 
+mod images;
+pub use images::encode_webp;
+
 use aes_gcm_siv::{
     Aes256GcmSiv, KeyInit, Nonce,
     aead::{Aead, Payload},
@@ -19,7 +22,9 @@ const MAX_NICKNAME_BYTES: usize = 24;
 const MAX_TEXT_CHARACTERS: usize = 4_000;
 const MAX_TEXT_BYTES: usize = 16_000;
 const MAX_TIMESTAMP_MS: u64 = 8_640_000_000_000_000;
-const PADDING_BUCKETS: [usize; 7] = [256, 512, 1_024, 2_048, 4_096, 8_192, 16_384];
+const CONTENT_VERSION: u8 = 3;
+const MAX_CONTENT_BYTES: usize = 32_000;
+const PADDING_BUCKETS: [usize; 8] = [256, 512, 1_024, 2_048, 4_096, 8_192, 16_384, 32_768];
 const ID_DOMAIN: &[u8] = b"tacitus/id/v2\0";
 const AUTH_DOMAIN: &[u8] = b"tacitus/auth/v2\0";
 const HANDSHAKE_DOMAIN: &[u8] = b"tacitus/handshake/v2\0";
@@ -626,9 +631,6 @@ impl PeerSession {
     }
 
     pub fn encrypt(&mut self, text: &str, created_at: u64) -> Result<String, ProtocolError> {
-        let SessionState::Ready(ratchet) = &mut self.state else {
-            return Err(error("secure session is not ready"));
-        };
         if text.chars().count() > MAX_TEXT_CHARACTERS
             || text.len() > MAX_TEXT_BYTES
             || text.is_empty()
@@ -636,8 +638,26 @@ impl PeerSession {
         {
             return Err(error("invalid message length"));
         }
+        self.encrypt_plaintext(padded_plaintext(text, created_at, VERSION)?)
+    }
+
+    pub fn encrypt_content(
+        &mut self,
+        content: &str,
+        created_at: u64,
+    ) -> Result<String, ProtocolError> {
+        if content.is_empty() || content.len() > MAX_CONTENT_BYTES || created_at > MAX_TIMESTAMP_MS
+        {
+            return Err(error("invalid content length"));
+        }
+        self.encrypt_plaintext(padded_plaintext(content, created_at, CONTENT_VERSION)?)
+    }
+
+    fn encrypt_plaintext(&mut self, plaintext: Vec<u8>) -> Result<String, ProtocolError> {
+        let SessionState::Ready(ratchet) = &mut self.state else {
+            return Err(error("secure session is not ready"));
+        };
         let (next_chain, message_key) = chain_keys(&ratchet.sending_chain);
-        let plaintext = padded_plaintext(text, created_at)?;
         let bucket = plaintext.len() as u32;
         let nonce: [u8; 12] = random_array()?;
         let header = MessageHeader {
@@ -807,6 +827,15 @@ impl PeerSession {
         self.encrypt(text, created_at).map_err(js_error)
     }
 
+    #[wasm_bindgen(js_name = encryptContent)]
+    pub fn wasm_encrypt_content(
+        &mut self,
+        content: &str,
+        created_at: u64,
+    ) -> Result<String, JsValue> {
+        self.encrypt_content(content, created_at).map_err(js_error)
+    }
+
     #[wasm_bindgen(js_name = decrypt)]
     pub fn wasm_decrypt(&mut self, envelope: &str) -> Result<String, JsValue> {
         serde_json::to_string(&self.decrypt(envelope).map_err(js_error)?)
@@ -868,6 +897,8 @@ pub struct DecryptedMessage {
     pub message_id: String,
     pub created_at: u64,
     pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
 }
 
 fn transcript(
@@ -973,7 +1004,7 @@ fn decode_signed_identity(bytes: &[u8]) -> Result<(IdentityDocument, Vec<u8>), P
     Ok((IdentityDocument::decode(document)?, signature.to_vec()))
 }
 
-fn padded_plaintext(text: &str, created_at: u64) -> Result<Vec<u8>, ProtocolError> {
+fn padded_plaintext(text: &str, created_at: u64, version: u8) -> Result<Vec<u8>, ProtocolError> {
     let text = text.as_bytes();
     let required = 1 + 8 + 16 + 2 + text.len();
     let bucket = PADDING_BUCKETS
@@ -982,7 +1013,7 @@ fn padded_plaintext(text: &str, created_at: u64) -> Result<Vec<u8>, ProtocolErro
         .find(|size| *size >= required)
         .ok_or_else(|| error("message does not fit padding buckets"))?;
     let mut plaintext = vec![0_u8; bucket];
-    plaintext[0] = VERSION;
+    plaintext[0] = version;
     plaintext[1..9].copy_from_slice(&created_at.to_be_bytes());
     getrandom::fill(&mut plaintext[9..25]).map_err(|_| error("random generator unavailable"))?;
     plaintext[25..27].copy_from_slice(&(text.len() as u16).to_be_bytes());
@@ -993,7 +1024,10 @@ fn padded_plaintext(text: &str, created_at: u64) -> Result<Vec<u8>, ProtocolErro
 }
 
 fn decode_padded_plaintext(bytes: &[u8]) -> Result<DecryptedMessage, ProtocolError> {
-    if !PADDING_BUCKETS.contains(&bytes.len()) || bytes.len() < 27 || bytes[0] != VERSION {
+    if !PADDING_BUCKETS.contains(&bytes.len())
+        || bytes.len() < 27
+        || !matches!(bytes[0], VERSION | CONTENT_VERSION)
+    {
         return Err(error("invalid padded plaintext"));
     }
     let created_at = u64::from_be_bytes(fixed::<8>(&bytes[1..9], "invalid timestamp")?);
@@ -1005,19 +1039,30 @@ fn decode_padded_plaintext(bytes: &[u8]) -> Result<DecryptedMessage, ProtocolErr
         &bytes[25..27],
         "invalid text length",
     )?));
-    if text_len > MAX_TEXT_BYTES || 27 + text_len > bytes.len() {
+    let is_content = bytes[0] == CONTENT_VERSION;
+    let limit = if is_content {
+        MAX_CONTENT_BYTES
+    } else {
+        MAX_TEXT_BYTES
+    };
+    if text_len > limit || 27 + text_len > bytes.len() {
         return Err(error("invalid text length"));
     }
     let text = std::str::from_utf8(&bytes[27..27 + text_len])
         .map_err(|_| error("message is not UTF-8"))?
         .to_owned();
-    if text.chars().count() > MAX_TEXT_CHARACTERS || text.is_empty() {
+    if (!is_content && text.chars().count() > MAX_TEXT_CHARACTERS) || text.is_empty() {
         return Err(error("invalid message length"));
     }
     Ok(DecryptedMessage {
         message_id,
         created_at,
-        text,
+        text: if is_content {
+            String::new()
+        } else {
+            text.clone()
+        },
+        content: is_content.then_some(text),
     })
 }
 

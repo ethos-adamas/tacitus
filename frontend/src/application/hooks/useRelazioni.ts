@@ -5,7 +5,6 @@ import {
   contattoRimosso,
   contattoSbloccato,
   intentoDiContattoAnnullato,
-  intentoDiContattoCreato,
 } from '../store/eventi';
 import { useDispatch, useSelector } from '../store/hooks';
 
@@ -22,12 +21,10 @@ export const useRelazioni = () => {
       throw new Error('Non puoi aggiungere la tua Identità.');
     }
     leggiRelay().aggiungiContatto(tacitusId);
-    dispatch(intentoDiContattoCreato(tacitusId));
   };
 
   const riattiva = (tacitusId: TacitusId) => {
     leggiRelay().aggiungiContatto(tacitusId);
-    dispatch(intentoDiContattoCreato(tacitusId));
   };
 
   const annullaIntento = (tacitusId: TacitusId) => {

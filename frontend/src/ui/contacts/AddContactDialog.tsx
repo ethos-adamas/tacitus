@@ -61,7 +61,7 @@ const AddContactDialog = ({ open, onClose }: AddContactDialogProps) => {
         </div>
         <p>
           Entrambe le Identità devono essere online e inserire reciprocamente il
-          Tacitus ID.
+          Tacitus ID. Puoi avere al massimo 5 Intenti in attesa.
         </p>
         <label>
           Tacitus ID

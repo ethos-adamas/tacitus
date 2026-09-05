@@ -26,15 +26,17 @@ pub const MASSIMA_DIMENSIONE_FRAME: usize = 64 * 1024;
 const TIMEOUT_SCRITTURA: Duration = Duration::from_secs(5);
 const CAPACITA_MAILBOX_SESSIONE: usize = 128;
 
-pub async fn gestisci_connessione(
+pub(super) async fn gestisci_connessione(
     mut socket: WebSocket,
     relay: RelayHandle,
     autenticatore: AutenticatoreProtocolloV3,
+    mut permesso: super::limiti::PermessoIngresso,
 ) {
     let Some((identita, blocchi)) = autentica(&mut socket, &autenticatore).await else {
         warn!(evento = "autenticazione_rifiutata");
         return;
     };
+    permesso.autenticata();
     let sessione = nuova_sessione();
     let blocchi = blocchi
         .into_iter()
@@ -187,7 +189,7 @@ fn comando(
             tipo,
             corpo,
         } => {
-            limiti.messaggio(ora)?;
+            limiti.messaggio(ora, corpo.as_str().len())?;
             Ok(ComandoRelay::Instrada {
                 sessione: sessione.clone(),
                 richiesta,

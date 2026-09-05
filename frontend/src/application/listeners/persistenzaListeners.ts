@@ -1,3 +1,7 @@
+import {
+  consensoFotoCambiato,
+  ricezioneFotoCambiata,
+} from '../store/albumSlice';
 import { isAnyOf } from '@reduxjs/toolkit';
 import {
   contattoAssociato,
@@ -28,6 +32,8 @@ export const registerPersistenzaListeners = (
 ): void => {
   startListening({
     matcher: isAnyOf(
+      consensoFotoCambiato,
+      ricezioneFotoCambiata,
       bozzaAggiornata,
       contattoAssociato,
       contattoBloccato,
@@ -47,13 +53,18 @@ export const registerPersistenzaListeners = (
       const state = getState() as RootState;
       if (state.identitaLocale.stato !== 'pronta') return;
       const persisted = {
+        album: state.album.preferenze,
         conversazioni: {
           perContatto: state.conversazioni.perContatto,
         },
         relazioni: state.relazioni,
       };
-      void enqueueStateSave(leggiIdentitaLocale(), persisted).catch(() => {
-        dispatch(erroreMostrato('Salvataggio locale non riuscito.'));
+      void enqueueStateSave(leggiIdentitaLocale(), persisted).catch(reason => {
+        const message =
+          reason instanceof DOMException && reason.name === 'QuotaExceededError'
+            ? 'Spazio locale esaurito. I nuovi dati non sono stati salvati.'
+            : 'Salvataggio locale non riuscito. I nuovi dati non sono stati salvati.';
+        dispatch(erroreMostrato(message));
       });
     },
   });

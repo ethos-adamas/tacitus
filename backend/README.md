@@ -25,3 +25,13 @@ Variabili:
 - `PUBLIC_ORIGINS`, lista separata da virgole degli origin esatti accettati in produzione. Il deploy include Web e i due origin Tauri mobile.
 
 `GET /health` restituisce anche la versione del protocollo. Il Dockerfile copia il binario già costruito dalla pipeline da `backend/artifacts/tacitus-backend`; non contiene uno stage di build.
+
+## Limiti di ammissione
+
+Il relay ammette al massimo 1.024 Identità in RAM, comprese quelle nei 30 secondi di tolleranza: una Sessione già nota può riconnettersi anche a registro pieno. Ogni Identità può avere 5 Intenti in attesa e 1.024 Blocchi, inclusi quelli aggiunti dopo l'autenticazione. Le Relazioni che scadono conservano un Intento soltanto se rimane posto nel limite di 5.
+
+All'upgrade WebSocket sono ammessi al massimo 1.088 socket complessivi, 64 autenticazioni pendenti, 64 socket e 8 autenticazioni per IP. I tentativi sono limitati a 128 al secondo globali e 120 al minuto per IP. I rifiuti producono HTTP 429/503, `Retry-After` ed eventi aggregabili senza registrare IP o Identità. `/health` non consuma questi posti. I contatori IP restano soltanto in RAM: un controllo ogni 30 secondi rimuove quelli senza connessioni e senza tentativi da almeno 60 secondi; la tabella contiene al massimo 4.096 IP.
+
+Dietro un reverse proxy configurare `TRUSTED_PROXY_IPS` con gli IP esatti dei proxy autorizzati, separati da virgole. Solo da questi peer viene interpretato `X-Forwarded-For`, da destra verso sinistra fino al primo hop non fidato. In assenza di configurazione conta l'IP del peer TCP: le connessioni provenienti dallo stesso proxy condividono quindi i limiti. Non autorizzare IP controllabili dai client.
+
+Il traffico autenticato ha un limite di 600 frame e 16 MiB di body opachi ogni 10 secondi per connessione. Ogni body resta limitato a 48 KiB e ogni frame WebSocket a 64 KiB; gli Album vengono suddivisi e confermati dai client senza introdurre storage sul relay.

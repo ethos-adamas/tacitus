@@ -193,6 +193,7 @@ pub fn codice_errore(errore: ErroreCoordinatore) -> &'static str {
             ErroreRelay::CollisioneIdentita => "identity_collision",
             ErroreRelay::ContattoNonDisponibile => "contact_unavailable",
             ErroreRelay::RichiestaNonValida => "invalid_request",
+            ErroreRelay::CapacitaEsaurita => "server_busy",
             ErroreRelay::TroppiIntenti => "too_many_contacts",
         },
     }

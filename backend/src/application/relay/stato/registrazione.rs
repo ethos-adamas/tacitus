@@ -16,6 +16,9 @@ impl Relay {
     ) -> Result<Vec<EventoRelay>, ErroreRelay> {
         let tacitus_id = identita.tacitus_id().clone();
         self.valida_blocchi(&tacitus_id, &blocchi)?;
+        if !self.identita.contains_key(&tacitus_id) && self.identita.len() >= 1024 {
+            return Err(ErroreRelay::CapacitaEsaurita);
+        }
         let mut eventi = Vec::new();
 
         if let Some(esistente) = self.identita.get(&tacitus_id) {

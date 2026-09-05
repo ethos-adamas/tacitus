@@ -16,7 +16,7 @@
   --card-shadow: 0 24px 70px #0008; --shell-shadow: 0 18px 65px #0007;
 }
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; min-height: 100vh; }
+body { margin: 0; min-width: 320px; }
 button, input, textarea { color: inherit; font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .45; }
@@ -35,7 +35,7 @@ label { font-size: .82rem; font-weight: 750; }
 input, textarea { width: 100%; padding: .8rem .9rem; border: 1px solid var(--line); border-radius: 9px; background: var(--input); }
 form button, header button, .conversation-title button, .dialog-actions button { padding: .65rem .8rem; border: 1px solid var(--line); border-radius: 8px; background: var(--input); }
 .error { color: var(--danger); }
-.app-shell { width: min(1100px, calc(100% - 2rem)); min-height: calc(100vh - 2rem); margin: 1rem auto; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shell-shadow); }
+.app-shell { width: min(1100px, calc(100% - 2rem)); height: calc(var(--viewport-height, 100dvh) - 2rem); display: flex; flex-direction: column; position: fixed; top: var(--viewport-top, 0px); left: 50%; transform: translateX(-50%); margin: 1rem 0; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shell-shadow); }
 header { min-height: 74px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 1rem; padding: .8rem 1.2rem; border-bottom: 1px solid var(--line); }
 .identity { display: grid; justify-items: center; gap: .16rem; }
 code { color: var(--muted); font: 650 .66rem ui-monospace, monospace; letter-spacing: .06em; }
@@ -48,8 +48,8 @@ code { color: var(--muted); font: 650 .66rem ui-monospace, monospace; letter-spa
 .toast { position: fixed; z-index: 10; top: 1rem; left: 50%; translate: -50%; display: flex; align-items: center; gap: 1rem; margin: 0; padding: .75rem 1rem; border-radius: 9px; color: white; background: var(--error); box-shadow: 0 8px 30px #0003; }
 .toast.success { background: var(--success); }
 .toast button { border: 0; color: inherit; background: transparent; font-size: 1.2rem; }
-.layout { min-height: calc(100vh - 106px); display: grid; grid-template-columns: 310px 1fr; }
-aside { border-right: 1px solid var(--line); background: var(--surface-soft); }
+.layout { flex: 1; min-height: 0; overflow: hidden; display: grid; grid-template-columns: 310px 1fr; }
+aside { overflow-y: auto; min-height: 0; border-right: 1px solid var(--line); background: var(--surface-soft); }
 .panel-title { height: 65px; display: flex; align-items: center; justify-content: space-between; padding: 0 1rem; border-bottom: 1px solid var(--line); }
 .panel-title h1 { font-size: 1rem; }
 .add { width: 2rem; height: 2rem; border: 0; border-radius: 50%; color: var(--on-green); background: var(--green); font-size: 1.3rem; }
@@ -62,18 +62,18 @@ aside { border-right: 1px solid var(--line); background: var(--surface-soft); }
 .blocked-contact button { padding: .45rem .6rem; border: 1px solid var(--line); border-radius: 7px; background: var(--input); }
 .avatar { width: 2.3rem; height: 2.3rem; display: inline-grid; place-items: center; flex: none; border-radius: 50%; color: var(--avatar-text); background: var(--avatar); font-weight: 850; }
 .unread { min-width: 1.3rem; padding: .18rem .35rem; border-radius: 1rem; color: var(--on-green); background: var(--green); font-size: .7rem; text-align: center; }
-.conversation { min-width: 0; display: grid; grid-template-rows: auto 1fr auto; }
+.conversation { min-width: 0; display: grid; min-height: 0; grid-template-rows: auto minmax(0, 1fr) auto; }
 .conversation-title { min-height: 65px; display: flex; align-items: center; gap: .7rem; padding: .7rem 1rem; border-bottom: 1px solid var(--line); }
 .conversation-title h2 { margin: 0 0 .15rem; font-size: .95rem; }
 .remove { margin-left: auto; }
 .back { display: none; border: 0 !important; }
-.messages { min-height: 0; max-height: calc(100vh - 252px); overflow-y: auto; display: flex; flex-direction: column; gap: .65rem; padding: 1.2rem; background: var(--surface-soft); }
+.messages { min-height: 0;  overflow-y: auto; display: flex; flex-direction: column; gap: .65rem; padding: 1.2rem; background: var(--surface-soft); }
 .empty { margin: auto; max-width: 24ch; padding: 2rem; color: var(--muted); text-align: center; line-height: 1.5; }
 .message { max-width: min(78%, 500px); padding: .65rem .8rem .5rem; border: 1px solid var(--line); border-radius: 12px 12px 12px 3px; background: var(--surface); overflow-wrap: anywhere; }
 .message.outgoing { align-self: flex-end; border-color: var(--line); border-radius: 12px 12px 3px 12px; background: var(--pale); }
 .message p { margin: 0; white-space: pre-wrap; line-height: 1.45; }
 .message time { display: block; margin-top: .25rem; color: var(--muted); font-size: .65rem; text-align: right; }
-.composer { position: relative; z-index: 1; display: grid; grid-template-columns: auto 1fr auto; align-items: end; gap: .6rem; padding: .8rem 1rem; border-top: 1px solid var(--line); }
+.composer { position: relative; z-index: 1; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .6rem; padding: .8rem 1rem; border-top: 1px solid var(--line); }
 .composer textarea { min-height: 2.7rem; max-height: 9rem; resize: vertical; padding-right: 4.2rem; }
 .composer small { position: absolute; right: 4.8rem; bottom: 1.1rem; color: var(--muted); font-size: .62rem; }
 .emoji-toggle { width: 2.7rem; height: 2.7rem; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--input); font-size: 1.25rem; }
@@ -97,18 +97,53 @@ dialog form > p { margin: 0; color: var(--muted); font-size: .82rem; line-height
 .dialog-title button { border: 0; background: transparent; font-size: 1.4rem; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: .5rem; }
 @media (max-width: 720px) {
-  .app-shell { width: 100%; min-height: 100vh; margin: 0; border: 0; border-radius: 0; }
-  header { grid-template-columns: 1fr; }
-  header > .brand { display: none; }
+  .app-shell { width: 100%; height: var(--viewport-height, 100dvh); margin: 0; border: 0; border-radius: 0; }
+  header { grid-template-columns: 1fr auto; gap: .5rem; padding: .6rem; }
+  header .identity { grid-row: 2; grid-column: 1 / -1; }
+  header > .brand { display: grid; }
   .identity { justify-items: center; }
-  .header-actions { justify-self: center; }
+  .header-actions { justify-self: end; }
   .copy-identity { font-size: 0; }
   .copy-identity::after { content: 'Copia ID'; font-size: .75rem; }
-  .layout { min-height: calc(100vh - 126px); display: block; }
-  aside { min-height: calc(100vh - 126px); border: 0; }
-  .conversation { display: none; min-height: calc(100vh - 126px); }
+  .layout { display: block; }
+  aside { height: 100%; border: 0; }
+  .conversation { display: none; height: 100%; }
   .conversation-open aside { display: none; }
   .conversation-open .conversation { display: grid; }
   .back { display: block; }
-  .messages { max-height: calc(100vh - 262px); }
+  .conversation-title { flex-wrap: wrap; gap: .4rem; padding: .5rem; }
+  .conversation-title code { font-size: .55rem; }
 }
+
+.brand { display: grid; grid-template-columns: auto auto; align-items: baseline; justify-content: start; column-gap: .4rem; }
+.brand .version { font-size: .65rem; letter-spacing: 0; font-weight: 500; }
+.brand small { grid-column: 1 / -1; font-size: .65rem; letter-spacing: .04em; font-weight: 500; }
+
+.settings { position: relative; }
+.settings summary { list-style: none; cursor: pointer; border: 1px solid var(--line); border-radius: 8px; padding: .5rem .7rem; font-size: 1.3rem; }
+.settings summary:focus-visible { outline: 3px solid var(--focus); }
+.settings-panel { position: absolute; z-index: 5; right: 0; top: calc(100% + .5rem); display: grid; gap: .7rem; padding: 1rem; width: min(300px, calc(100vw - 2rem)); max-height: 70dvh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--card-shadow); }
+.settings-panel .icon-action::after { content: attr(aria-label); font-size: .85rem; margin-left: .5rem; }
+
+.composer { padding-bottom: max(.8rem, env(safe-area-inset-bottom)); }
+
+.conversation-composer { min-width: 0; position: relative; }
+.album-composer { padding: .4rem 1rem; border-top: 1px solid var(--line); }
+.album-composer > small { display: block; font-size: .65rem; opacity: .7; }
+.photo-input { display: inline-block; position: relative; cursor: pointer; padding: .3rem; }
+.photo-input input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+.photo-input:focus-within { outline: 2px solid currentColor; }
+.album-preview > div { display: flex; overflow-x: auto; gap: .4rem; }
+.album-preview img { height: 80px; width: 80px; object-fit: cover; }
+.album-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 180px)); gap: .35rem; }
+.album-gallery img { display: block; width: 100%; max-height: 240px; object-fit: contain; border-radius: .5rem; }
+.album-gallery a:only-child { grid-column: 1 / -1; }
+.album-consent p { margin: .2rem 0; }
+.album-consent small { display: block; }
+.album-composer button { margin: .2rem; }
+.contact-settings { position: relative; }
+.contact-settings summary { cursor: pointer; padding: .5rem; }
+.contact-photo-setting { position: absolute; z-index: 5; top: 100%; right: 0; padding: .7rem; background: var(--surface); border: 1px solid var(--line); border-radius: .5rem; }
+.contact-photo-setting select { display: block; max-width: 220px; }
+
+.album-composer { max-height: 30dvh; overflow-y: auto; }

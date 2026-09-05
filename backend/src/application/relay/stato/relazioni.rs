@@ -3,14 +3,12 @@ use crate::{
     domain::{
         identita::TacitusId,
         relay::{CorpoCifrato, RichiestaId, TipoPayload},
-        relazioni::{Blocco, IntentoDiContatto, Relazione},
+        relazioni::{Blocco, IntentoDiContatto, MASSIMO_BLOCCHI_PER_IDENTITA, Relazione},
         sessioni::{Presenza, SessionId},
     },
 };
 
 use super::Relay;
-
-const MASSIMO_INTENTI: usize = 20;
 
 impl Relay {
     pub(super) fn crea_intento(
@@ -30,24 +28,12 @@ impl Relay {
         if self.relazioni.contains(&relazione) {
             return self.snapshot_relazione(sessione, &destinatario);
         }
-        if self
-            .intenti
-            .iter()
-            .filter(|intento| intento.da == mittente)
-            .count()
-            >= MASSIMO_INTENTI
-        {
-            return Err(ErroreRelay::TroppiIntenti);
-        }
-        self.intenti.insert(IntentoDiContatto::new(
-            mittente.clone(),
-            destinatario.clone(),
-        ));
         let reciproco = self.intenti.contains(&IntentoDiContatto::new(
             destinatario.clone(),
             mittente.clone(),
         )) && self.sessione_attiva(&destinatario).is_ok();
         if !reciproco {
+            self.conserva_intento(mittente.clone(), destinatario.clone())?;
             return Ok(vec![EventoRelay::Consegna {
                 sessione: sessione.clone(),
                 evento: EventoSessione::IntentoConfermato {
@@ -150,8 +136,14 @@ impl Relay {
         if mittente == destinatario {
             return Err(ErroreRelay::RichiestaNonValida);
         }
-        self.blocchi
-            .insert(Blocco::new(mittente.clone(), destinatario.clone()));
+        let blocco = Blocco::new(mittente.clone(), destinatario.clone());
+        if !self.blocchi.contains(&blocco)
+            && self.blocchi.iter().filter(|b| b.da == mittente).count()
+                >= MASSIMO_BLOCCHI_PER_IDENTITA
+        {
+            return Err(ErroreRelay::CapacitaEsaurita);
+        }
+        self.blocchi.insert(blocco);
         self.relazioni
             .remove(&Relazione::new(mittente.clone(), destinatario.clone()));
         self.rimuovi_intenti_reciproci(&mittente, &destinatario);

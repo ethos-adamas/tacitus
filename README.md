@@ -90,21 +90,45 @@ versione | session ID | from ID | to ID | ratchet public key |
 previous chain length | message number | bucket | nonce
 ```
 
-Il plaintext autenticato contiene versione, timestamp, message ID casuale, lunghezza reale, UTF-8 e padding casuale. I bucket del plaintext sono `256, 512, 1024, 2048, 4096, 8192, 16384` byte; il ciphertext aggiunge il tag da 16 byte. Il limite UI è 4.000 caratteri.
+Il plaintext autenticato contiene versione, timestamp, message ID casuale, lunghezza reale, UTF-8 e padding casuale. I bucket del plaintext sono `256, 512, 1024, 2048, 4096, 8192, 16384, 32768` byte; il ciphertext aggiunge il tag da 16 byte. Il limite UI è 4.000 caratteri.
 
 Il receiver rifiuta AEAD non valida, ID/sessione errati, replay e messaggi fuori ordine. Tacitus non offre retry o consegna offline: una disconnessione può perdere i frame in transito.
 
 Il padding nasconde la lunghezza esatta all'interno del bucket, non il bucket, la frequenza o gli orari. Non c'è cover traffic; la resistenza completa alla traffic analysis non è una garanzia della V2.
 
+### Foto, Album e consenso
+
+Un Album contiene da 1 a 10 foto. Il client accetta JPEG, PNG e WebP fino a 20 MiB e 24 megapixel per originale, ridimensiona il lato maggiore a 2048 pixel e ricodifica in WebP statico (massimo 5 MiB per foto). Non invia nomi di file, EXIF o XMP; può conservare il profilo colore generato dall'encoder. Il browser decodifica le foto; dove manca l'encoder WebP del canvas, il modulo WASM usa `image-webp`. Non sono previsti GIF animate, video o consegna offline.
+
+Prima di inviare qualsiasi byte delle foto viene scambiata un'offerta cifrata. Per un Contatto nuovo il destinatario vede un piccolo avviso: accettando autorizza anche gli Album successivi. Rifiutando disabilita ulteriori richieste da quel Contatto. L'ingranaggio del Contatto permette di tornare a «Chiedi consenso», accettare automaticamente o non ricevere; «Ricevi foto e album» nelle impostazioni globali prevale sulle scelte dei singoli Contatti. Il consenso riguarda la ricezione, non l'invio, e viene conservato solo nello snapshot locale cifrato.
+
+Il wire esterno rimane V3 e il relay continua a inoltrare esclusivamente body opachi, senza conservare immagini o offerte. Nel plaintext cifrato, la versione contenuto `2` identifica il testo esistente e `3` identifica JSON UTF-8 limitato a 32.000 byte. La struttura autenticata e il Double Ratchet restano gli stessi. Per scambiare Album entrambi i client devono essere aggiornati: i client precedenti non comprendono il contenuto `3`.
+
+| Contenuto cifrato | Campi oltre a `type` e `id` (UUID casuale dell'Album) |
+| --- | --- |
+| `album.offer` | `sizes`: 1–10 dimensioni in byte delle foto WebP |
+| `album.answer` | `accepted`: consenso alla trasmissione |
+| `album.chunk` | `index`: foto da 0; `offset`: byte da 0; `data`: Base64URL senza padding, massimo 18.000 byte decodificati |
+| `album.ack` | `index`, `offset`: posizione successiva attesa |
+| `album.cancel` | nessun altro campo |
+
+Il mittente aspetta l'ACK di ogni blocco e distanzia i blocchi di almeno 50 ms. Il destinatario accetta solo dimensioni, indice e offset concordati, controlla il contenitore [WebP](https://developers.google.com/speed/webp/docs/riff_container) e decodifica la foto prima di salvarla. Sono ammessi un trasferimento in uscita e uno in ingresso per dispositivo, con al massimo cinque offerte in attesa. L'offerta scade dopo due minuti; un blocco senza risposta scade dopo 30 secondi. Questi timeout riguardano gli Album, non gli Intenti di contatto. Disconnessione, annullamento o rimozione del Contatto interrompono il trasferimento senza ripresa automatica.
+
+Le foto diventano visibili nella cronologia dopo il salvataggio dell'intero Album. L'ultimo ACK viene inviato dopo il commit locale del destinatario. Se la connessione cade proprio tra commit e ACK, il destinatario può avere l'Album e il mittente vedere un trasferimento interrotto: non esiste una copia sul server con cui riconciliarli.
+
+Il relay non vede consenso, tipo di contenuto, nomi o dimensioni esatte delle foto. Vede ancora gli interlocutori, i bucket (ora anche 32.768 byte), tempi, numero e direzione dei frame: un trasferimento di immagini può essere dedotto da questi segnali. Non viene fornita resistenza completa all'analisi del traffico.
+
 ### Cronologia locale
 
-La Conversazione è separata dalla Sessione. Il client conserva testo e bozze in uno snapshot cifrato:
+La Conversazione è separata dalla Sessione. Il client conserva testo, bozze, riferimenti agli Album e consenso in uno snapshot cifrato:
 
 - Web: AES-256-GCM con chiave WebCrypto non esportabile;
 - Android: AES-256-GCM con chiave Android Keystore/StrongBox;
 - iOS: AES-256-GCM con chiave `ThisDeviceOnly` in Keychain.
 
-`Cancella dati` elimina Identità, chiavi, Contatti, Conversazioni e preferenze del dispositivo. Non esistono backup, recovery, sincronizzazione o multi-device.
+Gli Album sono record cifrati separati in IndexedDB, identificati da UUID opachi; il Contatto e le foto stanno nel ciphertext. La cancellazione di un Contatto elimina i relativi Album. Non vengono misurati lo spazio disponibile né imposte quote complessive o cancellazioni automatiche: un errore di spazio viene segnalato e non crea un Album incompleto. Un crash può lasciare un asset temporaneo non referenziato; non è prevista manutenzione automatica dello spazio.
+
+`Cancella dati` elimina Identità, chiavi, Contatti, Conversazioni, Album e preferenze del dispositivo. Non esistono backup, recovery, sincronizzazione o multi-device.
 
 Il client segue inizialmente il tema del sistema e conserva un'eventuale scelta chiaro/scuro. Le notifiche sono disattivate di default e richiedono un consenso esplicito. Quando Tacitus non è in primo piano, ogni nuovo Messaggio produce una notifica generica senza Contatto né anteprima; Web e app mobile non ricevono notifiche push quando vengono sospesi o chiusi.
 

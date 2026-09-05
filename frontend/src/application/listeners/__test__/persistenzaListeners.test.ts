@@ -1,3 +1,4 @@
+import { albumReducer } from '../../store/albumSlice';
 import { configureStore, createListenerMiddleware } from '@reduxjs/toolkit';
 import { describe, expect, it, vi } from 'vitest';
 import { parseTacitusId } from '../../../domain/tacitusId';
@@ -33,6 +34,7 @@ describe('persistenza della Messaggistica', () => {
     registerPersistenzaListeners(middleware.startListening as StartListening);
     const store = configureStore({
       reducer: {
+        album: albumReducer,
         conversazioni: conversazioniReducer,
         feedback: feedbackReducer,
         identitaLocale: identitaLocaleReducer,

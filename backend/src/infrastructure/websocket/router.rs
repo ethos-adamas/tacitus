@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 
 use axum::{
     Json, Router,
-    extract::{State, ws::WebSocketUpgrade},
+    extract::{ConnectInfo, State, ws::WebSocketUpgrade},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
     routing::{any, get},
@@ -18,6 +18,7 @@ use super::connessione::gestisci_connessione;
 #[derive(Clone)]
 struct StatoHttp {
     relay: RelayHandle,
+    ingresso: super::limiti::Ingresso,
     configurazione: Arc<Configurazione>,
 }
 
@@ -27,6 +28,7 @@ pub fn crea_router(relay: RelayHandle, configurazione: Configurazione) -> Router
         .route("/ws", any(websocket))
         .with_state(StatoHttp {
             relay,
+            ingresso: super::limiti::Ingresso::default(),
             configurazione: Arc::new(configurazione),
         })
 }
@@ -49,17 +51,42 @@ async fn health(State(stato): State<StatoHttp>) -> Response {
 
 async fn websocket(
     State(stato): State<StatoHttp>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     socket: WebSocketUpgrade,
 ) -> Response {
     if !origine_valida(&headers, &stato.configurazione) {
         return StatusCode::FORBIDDEN.into_response();
     }
+    let mut ip = peer.ip();
+    if stato.configurazione.proxy_fidati.contains(&ip)
+        && let Some(forwarded) = headers.get("x-forwarded-for")
+    {
+        let Ok(forwarded) = forwarded.to_str() else {
+            return StatusCode::BAD_REQUEST.into_response();
+        };
+        for previous in forwarded.rsplit(',') {
+            if !stato.configurazione.proxy_fidati.contains(&ip) {
+                break;
+            }
+            let Ok(previous) = previous.trim().parse() else {
+                return StatusCode::BAD_REQUEST.into_response();
+            };
+            ip = previous;
+        }
+    }
+    let permesso = match stato.ingresso.ammetti(ip) {
+        Ok(permesso) => permesso,
+        Err(status) => {
+            tracing::warn!(evento = "ingresso_rifiutato", codice = status.as_u16());
+            return (status, [("retry-after", "30")]).into_response();
+        }
+    };
     socket
         .max_frame_size(super::connessione::MASSIMA_DIMENSIONE_FRAME)
         .max_message_size(super::connessione::MASSIMA_DIMENSIONE_FRAME)
         .on_upgrade(move |socket| {
-            gestisci_connessione(socket, stato.relay, AutenticatoreProtocolloV3)
+            gestisci_connessione(socket, stato.relay, AutenticatoreProtocolloV3, permesso)
         })
 }
 

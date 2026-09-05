@@ -1,3 +1,8 @@
+import type {
+  PreferenzeAlbum,
+  ConsensoFoto,
+} from '../../application/store/albumSlice';
+import { validAlbumId, validateWebP } from '../album/album';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { ConversazioniState } from '../../application/store/conversazioniSlice';
 import type { RelazioniState } from '../../application/store/relazioniSlice';
@@ -15,13 +20,15 @@ import type { LocalIdentity } from '../identity/identityProvider';
 
 const DATABASE = 'tacitus-v3';
 const LEGACY_DATABASE = 'tacitus-v2';
-const VERSION = 1;
+const VERSION = 2;
+const ASSET_STORE = 'assets';
 const IDENTITY_STORE = 'identity';
 const SNAPSHOT_STORE = 'snapshot';
 const STORAGE_VERSION_KEY = 'tacitus.storage.version';
 const SNAPSHOT_AAD = new TextEncoder().encode('tacitus/local-snapshot/v3');
 
 export type PersistedState = {
+  album?: PreferenzeAlbum;
   conversazioni: Pick<ConversazioniState, 'perContatto'>;
   relazioni: RelazioniState;
 };
@@ -34,6 +41,7 @@ export type EncryptedSnapshot = {
 type StoredSnapshot = EncryptedSnapshot | { native: string };
 
 let pendingSave = Promise.resolve();
+let clearing = false;
 
 const bytes = (value: Uint8Array): Uint8Array<ArrayBuffer> =>
   new Uint8Array(value);
@@ -104,7 +112,20 @@ const parseMessage = (value: unknown): Messaggio => {
   const item = record(value);
   const direzione = item.direzione;
   if (direzione !== 'ricevuto' && direzione !== 'inviato') return invalidData();
+  let album: Messaggio['album'];
+  if (item.album !== undefined) {
+    const data = record(item.album);
+    if (
+      !validAlbumId(data.id) ||
+      !Number.isInteger(data.count) ||
+      number(data.count) < 1 ||
+      number(data.count) > 10
+    )
+      return invalidData();
+    album = { id: data.id, count: number(data.count) };
+  }
   return {
+    ...(album ? { album } : {}),
     id: string(item.id),
     direzione,
     testo: string(item.testo),
@@ -130,11 +151,26 @@ const parseConversation = (
   };
 };
 
+const parseAlbumPreferences = (value: unknown): PreferenzeAlbum => {
+  const item = record(value);
+  if (typeof item.abilitate !== 'boolean') return invalidData();
+  const contatti: Record<TacitusId, ConsensoFoto> = {};
+  Object.entries(record(item.contatti)).forEach(([key, consent]) => {
+    if (consent !== 'ask' && consent !== 'allow' && consent !== 'block')
+      return invalidData();
+    contatti[parseTacitusId(key)] = consent;
+  });
+  return { abilitate: item.abilitate, contatti };
+};
+
 export const parsePersistedState = (value: unknown): PersistedState => {
   const snapshot = record(value);
   const conversazioni = record(snapshot.conversazioni);
   const relazioni = record(snapshot.relazioni);
   return {
+    ...(snapshot.album !== undefined
+      ? { album: parseAlbumPreferences(snapshot.album) }
+      : {}),
     conversazioni: {
       perContatto: entriesByTacitusId(
         conversazioni.perContatto,
@@ -230,14 +266,28 @@ const parseEncryptedSnapshot = (value: unknown): EncryptedSnapshot => {
 
 const openDatabase = (): Promise<IDBDatabase> =>
   new Promise((resolve, reject) => {
+    if (clearing) {
+      reject(new Error('Cancellazione dati in corso.'));
+      return;
+    }
     const request = indexedDB.open(DATABASE, VERSION);
     request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(ASSET_STORE))
+        request.result.createObjectStore(ASSET_STORE);
       if (!request.result.objectStoreNames.contains(IDENTITY_STORE)) {
         request.result.createObjectStore(IDENTITY_STORE);
         request.result.createObjectStore(SNAPSHOT_STORE);
       }
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      if (clearing) {
+        request.result.close();
+        reject(new Error('Cancellazione dati in corso.'));
+        return;
+      }
+      request.result.onversionchange = () => request.result.close();
+      resolve(request.result);
+    };
     request.onerror = () => reject(request.error);
   });
 
@@ -247,12 +297,30 @@ const request = <T>(operation: IDBRequest<T>): Promise<T> =>
     operation.onerror = () => reject(operation.error);
   });
 
+const write = (
+  database: IDBDatabase,
+  store: string,
+  value: unknown,
+  key: IDBValidKey = 'current',
+): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const transaction = database.transaction(store, 'readwrite');
+    transaction.oncomplete = () => resolve();
+    transaction.onabort = () =>
+      reject(
+        transaction.error ??
+          new DOMException('Salvataggio interrotto.', 'AbortError'),
+      );
+    if (store === ASSET_STORE) transaction.objectStore(store).add(value, key);
+    else transaction.objectStore(store).put(value, key);
+  });
+
 const deleteDatabase = (name: string): Promise<void> =>
   new Promise((resolve, reject) => {
     const deletion = indexedDB.deleteDatabase(name);
     deletion.onsuccess = () => resolve();
     deletion.onerror = () => reject(deletion.error);
-    deletion.onblocked = () => reject(new Error('Database locale occupato.'));
+    // A closing connection can still have an active transaction. Wait for deletion's completion.
   });
 
 export const resetLegacyData = async (): Promise<void> => {
@@ -284,12 +352,7 @@ export const loadIdentity = async (): Promise<LocalIdentity | undefined> => {
 export const saveIdentity = async (identity: LocalIdentity): Promise<void> => {
   const database = await openDatabase();
   try {
-    await request(
-      database
-        .transaction(IDENTITY_STORE, 'readwrite')
-        .objectStore(IDENTITY_STORE)
-        .put(identity, 'current'),
-    );
+    await write(database, IDENTITY_STORE, identity);
   } finally {
     database.close();
   }
@@ -307,30 +370,33 @@ export const loadState = async (
         .get('current'),
     );
     if (!encrypted) return undefined;
-    if (identity.provider === 'native') {
-      const stored = record(encrypted);
-      const response = await invoke<{ value: string }>('plugin:identity|open', {
-        payload: { value: string(stored.native) },
-      });
-      return parsePersistedState(
-        JSON.parse(new TextDecoder().decode(fromBase64Url(response.value))),
-      );
-    }
-    return parsePersistedState(
-      await decryptSnapshot(
-        identity.storageKey,
-        parseEncryptedSnapshot(encrypted),
-      ),
-    );
+    return parsePersistedState(await openValue(identity, encrypted));
   } finally {
     database.close();
   }
 };
 
-export const saveState = async (
+const openValue = async (
   identity: LocalIdentity,
-  state: PersistedState,
-): Promise<void> => {
+  encrypted: unknown,
+): Promise<unknown> => {
+  if (identity.provider === 'native') {
+    const stored = record(encrypted);
+    const response = await invoke<{ value: string }>('plugin:identity|open', {
+      payload: { value: string(stored.native) },
+    });
+    return JSON.parse(new TextDecoder().decode(fromBase64Url(response.value)));
+  }
+  return decryptSnapshot(
+    identity.storageKey,
+    parseEncryptedSnapshot(encrypted),
+  );
+};
+
+const sealValue = async (
+  identity: LocalIdentity,
+  state: unknown,
+): Promise<StoredSnapshot> => {
   let encrypted: StoredSnapshot;
   if (identity.provider === 'native') {
     const plaintext = new TextEncoder().encode(JSON.stringify(state));
@@ -341,14 +407,17 @@ export const saveState = async (
   } else {
     encrypted = await encryptSnapshot(identity.storageKey, state);
   }
+  return encrypted;
+};
+
+export const saveState = async (
+  identity: LocalIdentity,
+  state: PersistedState,
+): Promise<void> => {
+  const encrypted = await sealValue(identity, state);
   const database = await openDatabase();
   try {
-    await request(
-      database
-        .transaction(SNAPSHOT_STORE, 'readwrite')
-        .objectStore(SNAPSHOT_STORE)
-        .put(encrypted, 'current'),
-    );
+    await write(database, SNAPSHOT_STORE, encrypted);
   } finally {
     database.close();
   }
@@ -358,15 +427,130 @@ export const enqueueStateSave = (
   identity: LocalIdentity,
   state: PersistedState,
 ): Promise<void> => {
+  if (clearing)
+    return Promise.reject(new Error('Cancellazione dati in corso.'));
   pendingSave = pendingSave
     .catch(() => undefined)
     .then(() => saveState(identity, state));
   return pendingSave;
 };
 
+export const saveAlbum = (
+  identity: LocalIdentity,
+  tacitusId: TacitusId,
+  id: string,
+  images: Uint8Array[],
+): Promise<void> => {
+  if (clearing)
+    return Promise.reject(new Error('Cancellazione dati in corso.'));
+  pendingSave = pendingSave
+    .catch(() => undefined)
+    .then(async () => {
+      if (!validAlbumId(id) || !images.length || images.length > 10)
+        return invalidData();
+      images.forEach(validateWebP);
+      const encrypted = await sealValue(identity, {
+        tacitusId,
+        id,
+        images: images.map(toBase64Url),
+      });
+      const database = await openDatabase();
+      try {
+        await write(database, ASSET_STORE, encrypted, id);
+      } finally {
+        database.close();
+      }
+    });
+  return pendingSave;
+};
+
+export const loadAlbum = async (
+  identity: LocalIdentity,
+  tacitusId: TacitusId,
+  id: string,
+): Promise<string[]> => {
+  const database = await openDatabase();
+  try {
+    const encrypted = await request(
+      database.transaction(ASSET_STORE).objectStore(ASSET_STORE).get(id),
+    );
+    if (!encrypted) throw new Error('Foto locali non disponibili.');
+    const data = record(await openValue(identity, encrypted));
+    if (
+      data.id !== id ||
+      data.tacitusId !== tacitusId ||
+      !Array.isArray(data.images) ||
+      !data.images.length ||
+      data.images.length > 10
+    )
+      return invalidData();
+    return data.images.map(value => {
+      const encoded = string(value);
+      validateWebP(fromBase64Url(encoded));
+      return (
+        'data:image/webp;base64,' +
+        encoded.replace(/-/g, '+').replace(/_/g, '/')
+      );
+    });
+  } finally {
+    database.close();
+  }
+};
+
+export const deleteContactAlbums = (
+  tacitusId: TacitusId,
+  id?: string,
+): Promise<void> => {
+  if (clearing) return Promise.resolve();
+  pendingSave = pendingSave
+    .catch(() => undefined)
+    .then(async () => {
+      const identity = await loadIdentity();
+      if (!identity) return;
+      const database = await openDatabase();
+      try {
+        // ponytail: sequential scan keeps contact IDs encrypted; add an encrypted index if deletion becomes slow.
+        const keys = id
+          ? [id]
+          : await request(
+              database
+                .transaction(ASSET_STORE)
+                .objectStore(ASSET_STORE)
+                .getAllKeys(),
+            );
+        for (const key of keys) {
+          const encrypted = await request(
+            database.transaction(ASSET_STORE).objectStore(ASSET_STORE).get(key),
+          );
+          if (
+            !encrypted ||
+            record(await openValue(identity, encrypted)).tacitusId !== tacitusId
+          )
+            continue;
+          await new Promise<void>((resolve, reject) => {
+            const tx = database.transaction(ASSET_STORE, 'readwrite');
+            tx.oncomplete = () => resolve();
+            tx.onabort = () =>
+              reject(tx.error ?? new Error('Cancellazione foto non riuscita.'));
+            tx.objectStore(ASSET_STORE).delete(key);
+          });
+        }
+      } finally {
+        database.close();
+      }
+    });
+  return pendingSave;
+};
+
 export const clearLocalData = async (): Promise<void> => {
-  await pendingSave.catch(() => undefined);
-  if (isTauri()) await invoke('plugin:identity|delete');
-  await deleteDatabase(DATABASE);
-  localStorage.clear();
+  clearing = true;
+  try {
+    await pendingSave.catch(() => undefined);
+    if (isTauri()) await invoke('plugin:identity|delete');
+    await deleteDatabase(DATABASE);
+    localStorage.clear();
+  } catch (reason) {
+    clearing = false;
+    throw reason;
+  }
 };

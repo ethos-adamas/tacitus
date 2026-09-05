@@ -1,3 +1,4 @@
+import Brand from '../shell/Brand';
 import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { useGestioneIdentitaLocale } from '../../application/hooks/useIdentitaLocale';
 import { useTema } from '../../application/hooks/useTheme';
@@ -12,7 +13,7 @@ const IdentitySetup = () => {
   const [nickname, setNickname] = useState('');
 
   const changeNickname = (event: ChangeEvent<HTMLInputElement>) => {
-    setNickname(event.target.value);
+    setNickname(event.target.value.toLowerCase());
   };
 
   const submitIdentity = async (event: FormEvent) => {
@@ -38,7 +39,7 @@ const IdentitySetup = () => {
         {tema === 'dark' ? '☀' : '☾'}
       </button>
       <section className="identity-card">
-        <p className="brand">TACITUS</p>
+        <Brand />
         <h1>Messaggistica privata senza account.</h1>
         <p>Le chiavi private non lasciano mai questo dispositivo.</p>
         <form onSubmit={submitIdentity}>
@@ -51,9 +52,16 @@ const IdentitySetup = () => {
               maxLength={24}
               pattern="[a-z0-9_]+"
               required
+              aria-describedby="nickname-help"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               autoFocus
             />
           </label>
+          <small id="nickname-help">
+            3–24 caratteri: lettere minuscole, numeri o underscore.
+          </small>
           <button className="primary">Crea Identità</button>
         </form>
         {error && (

@@ -109,3 +109,32 @@ describe('Sessioni sicure', () => {
     expect(decrypt).toThrow('Messaggio decifrato non valido.');
   });
 });
+
+it('una firma sospesa non ripristina né elimina una nuova Sessione dopo la disconnessione', async () => {
+  // Given
+  const { sign } = await import('../../identity/identityProvider');
+  let complete!: (signature: Uint8Array) => void;
+  vi.mocked(sign).mockImplementationOnce(
+    () =>
+      new Promise(resolve => {
+        complete = resolve;
+      }),
+  );
+  const { createSessioniSicure } = await import('../sessioniSicure');
+  const send = vi.fn();
+  const sessions = createSessioniSicure(send);
+  const peerId = parseTacitusId('10000-00000-00000-00000-000000');
+  sessions.avvia(identity, peerId);
+  const old = sessions.ricevi(identity, peerId, 'answer');
+  // When
+  sessions.eliminaTutte();
+  sessions.avvia(identity, peerId);
+  await sessions.ricevi(identity, peerId, 'answer');
+  send.mockClear();
+  complete(new Uint8Array([2]));
+  const result = await old;
+  // Then
+  expect(result.pronta).toBe(false);
+  expect(send).not.toHaveBeenCalled();
+  expect(sessions.pronta(peerId)).toBe(true);
+});

@@ -1,3 +1,5 @@
+import { ricezioneFotoCambiata } from '../../application/store/albumSlice';
+import Brand from './Brand';
 import { useGestioneIdentitaLocale } from '../../application/hooks/useIdentitaLocale';
 import { useImpostazioniNotifiche } from '../../application/hooks/useNotifications';
 import { useTema } from '../../application/hooks/useTheme';
@@ -10,6 +12,8 @@ import { copyTacitusId } from '../../infrastructure/clipboard/clipboard';
 
 const AppHeader = () => {
   const dispatch = useDispatch();
+  const fotoAbilitate = useSelector(state => state.album.preferenze.abilitate);
+  const togglePhotos = () => dispatch(ricezioneFotoCambiata(!fotoAbilitate));
   const connection = useSelector(state => state.connessioneRelay);
   const identitaState = useSelector(state => state.identitaLocale);
   const { cancella } = useGestioneIdentitaLocale();
@@ -47,7 +51,7 @@ const AppHeader = () => {
 
   return (
     <header>
-      <p className="brand">TACITUS</p>
+      <Brand />
       <div className="identity">
         <strong>{identity.nickname}</strong>
         <code>{identity.tacitusId}</code>
@@ -56,39 +60,57 @@ const AppHeader = () => {
         </span>
       </div>
       <div className="header-actions">
-        <button
-          className="icon-action"
-          onClick={toggleNotifications}
-          disabled={
-            notifiche.permesso === 'denied' ||
-            notifiche.permesso === 'unsupported'
-          }
-          aria-pressed={notifiche.abilitate}
-          aria-label={
-            notifiche.abilitate ? 'Disattiva notifiche' : 'Abilita notifiche'
-          }
-          title={
-            notifiche.permesso === 'denied'
-              ? 'Notifiche bloccate nelle impostazioni del dispositivo'
-              : notifiche.abilitate
-                ? 'Disattiva notifiche'
-                : 'Abilita notifiche'
-          }>
-          {notifiche.abilitate ? '🔔' : '🔕'}
-        </button>
-        <button
-          className="icon-action"
-          onClick={cambiaTema}
-          aria-label={`Passa al tema ${tema === 'dark' ? 'chiaro' : 'scuro'}`}
-          title={`Tema ${tema === 'dark' ? 'chiaro' : 'scuro'}`}>
-          {tema === 'dark' ? '☀' : '☾'}
-        </button>
         <button className="copy-identity" onClick={shareIdentity}>
           Copia Tacitus ID
         </button>
-        <button className="danger" onClick={deleteIdentity}>
-          Cancella dati
-        </button>
+        <details className="settings">
+          <summary aria-label="Impostazioni" title="Impostazioni">
+            ⚙
+          </summary>
+          <div className="settings-panel">
+            <strong>Impostazioni</strong>
+            <label>
+              <input
+                type="checkbox"
+                checked={fotoAbilitate}
+                onChange={togglePhotos}
+              />
+              Ricevi foto e album
+            </label>
+            <button
+              className="icon-action"
+              onClick={toggleNotifications}
+              disabled={
+                notifiche.permesso === 'denied' ||
+                notifiche.permesso === 'unsupported'
+              }
+              aria-pressed={notifiche.abilitate}
+              aria-label={
+                notifiche.abilitate
+                  ? 'Disattiva notifiche'
+                  : 'Abilita notifiche'
+              }
+              title={
+                notifiche.permesso === 'denied'
+                  ? 'Notifiche bloccate nelle impostazioni del dispositivo'
+                  : notifiche.abilitate
+                    ? 'Disattiva notifiche'
+                    : 'Abilita notifiche'
+              }>
+              {notifiche.abilitate ? '🔔' : '🔕'}
+            </button>
+            <button
+              className="icon-action"
+              onClick={cambiaTema}
+              aria-label={`Passa al tema ${tema === 'dark' ? 'chiaro' : 'scuro'}`}
+              title={`Tema ${tema === 'dark' ? 'chiaro' : 'scuro'}`}>
+              {tema === 'dark' ? '☀' : '☾'}
+            </button>
+            <button className="danger" onClick={deleteIdentity}>
+              Cancella dati
+            </button>
+          </div>
+        </details>
       </div>
     </header>
   );

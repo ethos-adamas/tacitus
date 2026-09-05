@@ -1,9 +1,13 @@
-use std::{env, net::SocketAddr};
+use std::{
+    env,
+    net::{IpAddr, SocketAddr},
+};
 
 #[derive(Clone, Debug)]
 pub struct Configurazione {
     pub indirizzo: SocketAddr,
     pub origini_pubbliche: Vec<String>,
+    pub proxy_fidati: Vec<IpAddr>,
 }
 
 impl Configurazione {
@@ -22,9 +26,17 @@ impl Configurazione {
                     .collect()
             })
             .unwrap_or_default();
+        let proxy_fidati = env::var("TRUSTED_PROXY_IPS")
+            .unwrap_or_default()
+            .split(',')
+            .map(str::trim)
+            .filter(|ip| !ip.is_empty())
+            .map(|ip| ip.parse().map_err(|_| ConfigurazioneNonValida))
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(Self {
             indirizzo,
             origini_pubbliche,
+            proxy_fidati,
         })
     }
 }

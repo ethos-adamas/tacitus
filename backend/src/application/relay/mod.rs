@@ -13,4 +13,5 @@ pub enum ErroreRelay {
     ContattoNonDisponibile,
     RichiestaNonValida,
     TroppiIntenti,
+    CapacitaEsaurita,
 }
