@@ -25,6 +25,8 @@ spec:
           env:
             - name: PUBLIC_ORIGINS
               value: https://tacitus.ethos-adamas.it,http://tauri.localhost,tauri://localhost
+	    - name: TRUSTED_PROXY_IPS
+	      value: "10.42.0.8"
           ports:
             - name: http
               containerPort: 3000
