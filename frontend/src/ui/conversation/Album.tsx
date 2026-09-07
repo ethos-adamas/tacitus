@@ -2,17 +2,17 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import type { TacitusId } from '../../domain/tacitusId';
 import {
   annullaAlbum,
-  inviaAlbum,
   rifiutaFoto,
   rispondiAlbum,
 } from '../../application/album/trasferimentiAlbum';
 import { consensoFotoCambiato } from '../../application/store/albumSlice';
 import { useDispatch, useSelector } from '../../application/store/hooks';
-import { erroreMostrato } from '../../application/store/feedbackSlice';
-import { prepareImages } from '../../infrastructure/album/album';
-import { toBase64Url } from '../../infrastructure/encoding/base64Url';
+import { MAX_IMAGES } from '../../infrastructure/album/album';
 import { leggiIdentitaLocale } from '../../infrastructure/identity/identitaLocaleCorrente';
 import { loadAlbum } from '../../infrastructure/persistence/localPersistence';
+import PhotoViewer from '../kit/PhotoViewer';
+import { SelectField } from '../kit/Fields';
+import { Button } from '../kit/Button';
 
 export const AlbumGallery = ({
   tacitusId,
@@ -25,6 +25,8 @@ export const AlbumGallery = ({
   const [error, setError] = useState('');
   useEffect(() => {
     let active = true;
+    setImages([]);
+    setError('');
     void loadAlbum(leggiIdentitaLocale(), tacitusId, id)
       .then(value => {
         if (active) setImages(value);
@@ -40,9 +42,12 @@ export const AlbumGallery = ({
     <div className="album-gallery">
       {error && <p role="alert">{error}</p>}
       {images.map((src, index) => (
-        <a key={index} href={src} download={`foto-${index + 1}.webp`}>
-          <img src={src} alt={`Foto ${index + 1}`} loading="lazy" />
-        </a>
+        <PhotoViewer
+          key={`${tacitusId}-${id}-${index}`}
+          src={src}
+          alt={`Foto ${index + 1}`}
+          downloadName={`foto-${index + 1}.webp`}
+        />
       ))}
     </div>
   );
@@ -59,79 +64,149 @@ export const AlbumConsent = ({ tacitusId }: { tacitusId: TacitusId }) => {
       dispatch(consensoFotoCambiato({ tacitusId, consenso: value }));
   };
   return (
-    <label className="contact-photo-setting">
-      Foto
-      <select
-        aria-label="Foto da questo Contatto"
-        value={consent}
-        onChange={change}>
-        <option value="ask">Chiedi consenso</option>
-        <option value="allow">Accetta automaticamente</option>
-        <option value="block">Non ricevere</option>
-      </select>
-    </label>
+    <SelectField
+      className="contact-photo-select"
+      label="Foto"
+      aria-label="Foto da questo Contatto"
+      value={consent}
+      onChange={change}>
+      <option value="ask">Chiedi consenso</option>
+      <option value="allow">Accetta automaticamente</option>
+      <option value="block">Non ricevere</option>
+    </SelectField>
   );
 };
 
-export const AlbumComposer = ({
-  tacitusId,
-  disabled,
-}: {
-  tacitusId: TacitusId;
+type PhotoPickerProps = {
   disabled: boolean;
-}) => {
-  const dispatch = useDispatch();
-  // Prepared image buffers belong to this preview, not to the persisted application state.
-  const [images, setImages] = useState<Uint8Array[]>([]);
-  const [preparing, setPreparing] = useState(false);
-  const generation = useRef(0);
-  const offer = useSelector(state => state.album.offerte[tacitusId]);
-  const progress = useSelector(state => state.album.progresso[tacitusId]);
-  const showError = (reason: unknown) =>
-    dispatch(
-      erroreMostrato(
-        reason instanceof Error
-          ? reason.message
-          : 'Preparazione Album non riuscita.',
-      ),
-    );
-  const choose = async (event: ChangeEvent<HTMLInputElement>) => {
+  onFiles: (files: File[]) => void;
+};
+
+export const PhotoPicker = ({ disabled, onFiles }: PhotoPickerProps) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const openPicker = () => inputRef.current?.click();
+  const chooseFiles = (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
     event.target.value = '';
-    const current = ++generation.current;
-    setImages([]);
-    if (!files.length) return;
-    setPreparing(true);
-    try {
-      const prepared = await prepareImages(files);
-      if (current === generation.current) setImages(prepared);
-    } catch (reason) {
-      if (current === generation.current) showError(reason);
-    } finally {
-      if (current === generation.current) setPreparing(false);
-    }
+    if (files.length) onFiles(files);
   };
-  const cancelPreview = () => {
-    generation.current++;
-    setImages([]);
-    setPreparing(false);
-  };
-  const send = () => {
-    const prepared = images;
-    setImages([]);
-    void inviaAlbum(tacitusId, prepared).catch(showError);
-  };
+  return (
+    <>
+      <Button type="button" disabled={disabled} onClick={openPicker}>
+        Aggiungi foto
+      </Button>
+      <input
+        ref={inputRef}
+        className="photo-picker-input"
+        aria-label="Scegli foto"
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        multiple
+        disabled={disabled}
+        onChange={chooseFiles}
+      />
+    </>
+  );
+};
+
+type FotoPreview = Readonly<{ id: string; src: string }>;
+
+type AlbumPreviewProps = {
+  foto: readonly FotoPreview[];
+  preparing: boolean;
+  sending: boolean;
+  sendDisabled: boolean;
+  onRemove: (fotoId: string) => void;
+  onCancel: () => void;
+  onSend: () => void;
+};
+
+type PhotoThumbnailProps = {
+  foto: FotoPreview;
+  index: number;
+  disabled: boolean;
+  onRemove: (fotoId: string) => void;
+};
+
+const PhotoThumbnail = ({
+  disabled,
+  foto,
+  index,
+  onRemove,
+}: PhotoThumbnailProps) => {
+  const remove = () => onRemove(foto.id);
+  return (
+    <figure>
+      <img src={foto.src} alt={`Anteprima ${index + 1}`} />
+      <Button
+        type="button"
+        variant="ghost"
+        disabled={disabled}
+        aria-label={`Rimuovi foto ${index + 1}`}
+        onClick={remove}>
+        ×
+      </Button>
+    </figure>
+  );
+};
+
+export const AlbumPreview = ({
+  foto,
+  onCancel,
+  onRemove,
+  onSend,
+  preparing,
+  sendDisabled,
+  sending,
+}: AlbumPreviewProps) => {
+  if (!foto.length && !preparing && !sending) return null;
+  return (
+    <section className="album-preview" aria-label="Anteprima Album">
+      <div className="album-preview-heading">
+        <strong>
+          {foto.length}/{MAX_IMAGES} foto
+        </strong>
+        {preparing && <span role="status">Preparazione foto…</span>}
+      </div>
+      <div className="album-preview-list">
+        {foto.map((item, index) => (
+          <PhotoThumbnail
+            key={item.id}
+            foto={item}
+            index={index}
+            disabled={preparing || sending}
+            onRemove={onRemove}
+          />
+        ))}
+      </div>
+      <div className="album-preview-actions">
+        <Button type="button" disabled={sending} onClick={onCancel}>
+          Annulla album
+        </Button>
+        <Button
+          type="button"
+          variant="primary"
+          disabled={sendDisabled}
+          onClick={onSend}>
+          Invia album
+        </Button>
+      </div>
+    </section>
+  );
+};
+
+export const AlbumTransferStatus = ({
+  tacitusId,
+}: {
+  tacitusId: TacitusId;
+}) => {
+  const offer = useSelector(state => state.album.offerte[tacitusId]);
+  const progress = useSelector(state => state.album.progresso[tacitusId]);
   const accept = () => rispondiAlbum(tacitusId, true);
   const reject = () => rifiutaFoto(tacitusId);
   const cancelTransfer = () => annullaAlbum(tacitusId);
-  useEffect(
-    () => () => {
-      generation.current++;
-    },
-    [tacitusId],
-  );
   return (
-    <div className="album-composer">
+    <>
       {offer && (
         <div className="album-consent" role="status">
           <p>Accettare foto da questo Contatto?</p>
@@ -140,52 +215,22 @@ export const AlbumComposer = ({
             accettate. Puoi revocare il consenso nelle impostazioni del
             Contatto.
           </small>
-          <button onClick={accept}>Accetta foto</button>
-          <button onClick={reject}>Rifiuta foto</button>
+          <Button type="button" onClick={accept}>
+            Accetta foto
+          </Button>
+          <Button type="button" onClick={reject}>
+            Rifiuta foto
+          </Button>
         </div>
       )}
       {progress && (
         <div role="status">
           {progress}
-          <button onClick={cancelTransfer}>Interrompi album</button>
+          <Button type="button" onClick={cancelTransfer}>
+            Interrompi album
+          </Button>
         </div>
       )}
-      {!!images.length && (
-        <div className="album-preview">
-          <div>
-            {images.map((image, index) => (
-              <img
-                key={index}
-                src={
-                  'data:image/webp;base64,' +
-                  toBase64Url(image).replace(/-/g, '+').replace(/_/g, '/')
-                }
-                alt={`Anteprima ${index + 1}`}
-              />
-            ))}
-          </div>
-          <button onClick={cancelPreview}>Annulla album</button>
-          <button disabled={disabled} onClick={send}>
-            Invia album
-          </button>
-        </div>
-      )}
-      <label className="photo-input">
-        ＋ Foto
-        <input
-          aria-label="Scegli foto"
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          multiple
-          disabled={disabled || preparing || !!progress}
-          onChange={choose}
-        />
-      </label>
-      <small>
-        {preparing
-          ? 'Preparazione foto…'
-          : '1–10 foto · JPEG, PNG, WebP · originali ≤20 MiB/24 MP · invio WebP ≤5 MiB/foto, lato ≤2048 px'}
-      </small>
-    </div>
+    </>
   );
 };
