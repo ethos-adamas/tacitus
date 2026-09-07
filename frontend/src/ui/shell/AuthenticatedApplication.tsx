@@ -4,8 +4,10 @@ import Conversation from '../conversation/Conversation';
 import ConversationList from '../contacts/ConversationList';
 import Feedback from '../feedback/Feedback';
 import AppHeader from './AppHeader';
+import { usePhotoDropProtection } from '../kit/PhotoDropzone';
 
 const AuthenticatedApplication = () => {
+  usePhotoDropProtection();
   const conversationOpen = useSelector(
     state => state.conversazioni.idConversazioneAttiva !== undefined,
   );
