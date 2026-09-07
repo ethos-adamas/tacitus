@@ -180,7 +180,7 @@ const waitFor = (
 export const inviaAlbum = async (
   peer: TacitusId,
   images: Uint8Array[],
-): Promise<void> => {
+): Promise<boolean> => {
   if (outgoing) throw new Error('Attendi la fine dell’album in uscita.');
   if (!images.length || images.length > 10)
     throw new Error('Scegli da 1 a 10 foto.');
@@ -265,6 +265,7 @@ export const inviaAlbum = async (
     }
     if (!completed) await deleteContactAlbums(peer, transfer.id).catch(report);
   }
+  return completed;
 };
 
 export const riceviAlbum = async (

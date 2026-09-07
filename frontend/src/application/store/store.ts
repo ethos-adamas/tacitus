@@ -1,4 +1,5 @@
 import { registerAlbumListeners } from '../album/trasferimentiAlbum';
+import { registerAnteprimeAlbum } from '../album/anteprimeAlbum';
 import { albumReducer } from './albumSlice';
 import { configureStore } from '@reduxjs/toolkit';
 import { registerMessaggiListeners } from '../listeners/messaggiListeners';
@@ -53,6 +54,7 @@ export const store = configureStore({
 });
 
 registerAlbumListeners(listenerMiddleware.startListening, store);
+registerAnteprimeAlbum(listenerMiddleware.startListening, store);
 
 export type AppDispatch = typeof store.dispatch;
 export type AppStore = typeof store;

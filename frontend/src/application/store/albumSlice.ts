@@ -7,13 +7,20 @@ export type PreferenzeAlbum = {
   abilitate: boolean;
   contatti: Record<TacitusId, ConsensoFoto>;
 };
+export type AnteprimaAlbumMeta = {
+  fotoIds: string[];
+  preparazione: boolean;
+  invio: boolean;
+};
 type AlbumState = {
   preferenze: PreferenzeAlbum;
+  anteprime: Record<TacitusId, AnteprimaAlbumMeta>;
   offerte: Record<TacitusId, { id: string; count: number }>;
   progresso: Record<TacitusId, string>;
 };
 const initialState: AlbumState = {
   preferenze: { abilitate: true, contatti: {} },
+  anteprime: {},
   offerte: {},
   progresso: {},
 };
@@ -29,6 +36,20 @@ const albumSlice = createSlice({
     },
     ricezioneFotoCambiata: (state, { payload }: PayloadAction<boolean>) => {
       state.preferenze.abilitate = payload;
+    },
+    anteprimaAlbumAggiornata: (
+      state,
+      {
+        payload,
+      }: PayloadAction<{ tacitusId: TacitusId; anteprima: AnteprimaAlbumMeta }>,
+    ) => {
+      state.anteprime[payload.tacitusId] = payload.anteprima;
+    },
+    anteprimaAlbumEliminata: (state, { payload }: PayloadAction<TacitusId>) => {
+      delete state.anteprime[payload];
+    },
+    anteprimeAlbumSvuotate: state => {
+      state.anteprime = {};
     },
     consensoFotoCambiato: (
       state,
@@ -66,6 +87,7 @@ const albumSlice = createSlice({
       { payload }: PayloadAction<TacitusId>,
     ) => {
       delete state.preferenze.contatti[payload];
+      delete state.anteprime[payload];
       delete state.offerte[payload];
       delete state.progresso[payload];
     };
@@ -81,6 +103,9 @@ const albumSlice = createSlice({
 export const {
   preferenzeAlbumCaricate,
   ricezioneFotoCambiata,
+  anteprimaAlbumAggiornata,
+  anteprimaAlbumEliminata,
+  anteprimeAlbumSvuotate,
   consensoFotoCambiato,
   offertaAlbumRicevuta,
   offertaAlbumChiusa,

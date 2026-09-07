@@ -1,4 +1,5 @@
 import { annullaAlbum } from '../album/trasferimentiAlbum';
+import { svuotaAnteprime } from '../album/anteprimeAlbum';
 import { preferenzeAlbumCaricate } from '../store/albumSlice';
 import { useEffect } from 'react';
 import { conversazioniCaricate } from '../store/conversazioniSlice';
@@ -87,6 +88,7 @@ export const useGestioneIdentitaLocale = () => {
   const cancella = async () => {
     leggiIdentitaLocale();
     annullaAlbum();
+    svuotaAnteprime();
     await clearLocalData();
     rimuoviIdentitaLocale();
     location.reload();
