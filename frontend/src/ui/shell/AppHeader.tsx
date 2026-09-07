@@ -69,7 +69,7 @@ const AppHeader = () => {
           </summary>
           <div className="settings-panel">
             <strong>Impostazioni</strong>
-            <label>
+            <label className="photo-reception-setting">
               <input
                 type="checkbox"
                 checked={fotoAbilitate}
