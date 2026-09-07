@@ -8,6 +8,7 @@ import {
 } from '../../application/store/selectors';
 import type { StatoContatto } from '../../domain/relazioni';
 import type { TacitusId } from '../../domain/tacitusId';
+import { Button } from '../kit/Button';
 import AddContactDialog from './AddContactDialog';
 
 const statusLabel: Record<StatoContatto, string> = {
@@ -33,9 +34,13 @@ const IntentRow = ({ tacitusId }: IntentRowProps) => {
         <small>In attesa del Contatto</small>
         <code>{tacitusId}</code>
       </span>
-      <button type="button" onClick={cancel} aria-label="Annulla Intento">
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={cancel}
+        aria-label="Annulla Intento">
         ×
-      </button>
+      </Button>
     </div>
   );
 };
@@ -58,7 +63,11 @@ const ConversationRow = ({
   const fotoInAttesa = useSelector(state => !!state.album.offerte[tacitusId]);
   const select = () => onSelect(tacitusId);
   return (
-    <button className={`contact ${attiva ? 'selected' : ''}`} onClick={select}>
+    <Button
+      type="button"
+      variant="ghost"
+      className={`!grid contact ${attiva ? 'selected' : ''}`}
+      onClick={select}>
       <span className="avatar">{nickname[0].toUpperCase()}</span>
       <span>
         <strong>{nickname}</strong>
@@ -66,7 +75,7 @@ const ConversationRow = ({
         {fotoInAttesa && <small>Foto da accettare</small>}
       </span>
       {nonLetti > 0 && <b className="unread">{nonLetti}</b>}
-    </button>
+    </Button>
   );
 };
 
@@ -82,9 +91,9 @@ const BlockedRow = ({ tacitusId }: BlockedRowProps) => {
         <strong>Identità bloccata</strong>
         <code>{tacitusId}</code>
       </span>
-      <button type="button" onClick={unblock} aria-label="Sblocca">
+      <Button type="button" onClick={unblock} aria-label="Sblocca">
         Sblocca
-      </button>
+      </Button>
     </div>
   );
 };
@@ -100,9 +109,15 @@ const ConversationList = () => {
     <aside>
       <div className="panel-title">
         <h1>Conversazioni</h1>
-        <button className="add" onClick={openDialog}>
-          +
-        </button>
+        <AddContactDialog
+          open={dialogOpen}
+          onClose={closeDialog}
+          trigger={
+            <Button className="add" onClick={openDialog}>
+              +
+            </Button>
+          }
+        />
       </div>
       {voci.length === 0 ? (
         <p className="empty">Aggiungi il Tacitus ID di una persona online.</p>
@@ -127,7 +142,6 @@ const ConversationList = () => {
           ))}
         </section>
       )}
-      <AddContactDialog open={dialogOpen} onClose={closeDialog} />
     </aside>
   );
 };

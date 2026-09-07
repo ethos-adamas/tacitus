@@ -1,24 +1,31 @@
 import {
-  useEffect,
-  useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
+  type ReactElement,
 } from 'react';
 import { useRelazioni } from '../../application/hooks/useRelazioni';
 import { erroreMostrato } from '../../application/store/feedbackSlice';
 import { useDispatch } from '../../application/store/hooks';
+import { Button } from '../kit/Button';
+import { TextInput } from '../kit/Fields';
+import { Modal } from '../kit/Modal';
 
 type AddContactDialogProps = {
   open: boolean;
   onClose: () => void;
+  trigger: ReactElement;
 };
 
-const AddContactDialog = ({ open, onClose }: AddContactDialogProps) => {
+const AddContactDialog = ({
+  open,
+  onClose,
+  trigger,
+}: AddContactDialogProps) => {
   const dispatch = useDispatch();
   const { creaIntento } = useRelazioni();
   const [tacitusIdInserito, setTacitusIdInserito] = useState('');
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [submitError, setSubmitError] = useState<string>();
 
   const changeTacitusId = (event: ChangeEvent<HTMLInputElement>) => {
     setTacitusIdInserito(event.target.value);
@@ -26,6 +33,7 @@ const AddContactDialog = ({ open, onClose }: AddContactDialogProps) => {
 
   const close = () => {
     setTacitusIdInserito('');
+    setSubmitError(undefined);
     onClose();
   };
 
@@ -35,37 +43,36 @@ const AddContactDialog = ({ open, onClose }: AddContactDialogProps) => {
       creaIntento(tacitusIdInserito);
       close();
     } catch (reason) {
-      dispatch(
-        erroreMostrato(
-          reason instanceof Error ? reason.message : 'Tacitus ID non valido.',
-        ),
-      );
+      const message =
+        reason instanceof Error ? reason.message : 'Tacitus ID non valido.';
+      setSubmitError(message);
+      dispatch(erroreMostrato(message));
     }
   };
 
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
-  }, [open]);
-
   return (
-    <dialog ref={dialogRef} onClose={close}>
-      <form onSubmit={submit}>
-        <div className="dialog-title">
-          <h2>Aggiungi Contatto</h2>
-          <button type="button" onClick={close}>
-            ×
-          </button>
+    <Modal
+      open={open}
+      onOpenChange={nextOpen => {
+        if (!nextOpen) close();
+      }}
+      trigger={trigger}
+      title="Aggiungi Contatto"
+      description="Entrambe le Identità devono essere online e inserire reciprocamente il Tacitus ID. Puoi avere al massimo 5 Intenti in attesa."
+      footer={
+        <div className="dialog-actions">
+          <Button type="button" onClick={close}>
+            Annulla
+          </Button>
+          <Button type="submit" form="add-contact-form" variant="primary">
+            Aggiungi
+          </Button>
         </div>
-        <p>
-          Entrambe le Identità devono essere online e inserire reciprocamente il
-          Tacitus ID. Puoi avere al massimo 5 Intenti in attesa.
-        </p>
-        <label>
+      }>
+      <form id="add-contact-form" onSubmit={submit}>
+        <label className="field-label">
           Tacitus ID
-          <input
+          <TextInput
             value={tacitusIdInserito}
             onChange={changeTacitusId}
             placeholder="00000-00000-00000-00000-000000"
@@ -73,14 +80,9 @@ const AddContactDialog = ({ open, onClose }: AddContactDialogProps) => {
             autoFocus
           />
         </label>
-        <div className="dialog-actions">
-          <button type="button" onClick={close}>
-            Annulla
-          </button>
-          <button className="primary">Aggiungi</button>
-        </div>
+        {submitError && <p role="alert">{submitError}</p>}
       </form>
-    </dialog>
+    </Modal>
   );
 };
 
