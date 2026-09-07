@@ -1,9 +1,11 @@
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   avvisoNascosto,
   erroreNascosto,
 } from '../../application/store/feedbackSlice';
 import { useDispatch, useSelector } from '../../application/store/hooks';
+import { Button } from '../kit/Button';
 
 const Feedback = () => {
   const dispatch = useDispatch();
@@ -17,12 +19,17 @@ const Feedback = () => {
     return () => clearTimeout(timer);
   }, [dispatch, feedback.avviso]);
 
-  return (
+  return createPortal(
     <>
       {feedback.errore && (
         <p className="toast" role="alert">
           {feedback.errore}
-          <button onClick={hideError}>×</button>
+          <Button
+            variant="ghost"
+            aria-label="Chiudi errore"
+            onClick={hideError}>
+            ×
+          </Button>
         </p>
       )}
       {feedback.avviso && (
@@ -30,7 +37,8 @@ const Feedback = () => {
           {feedback.avviso}
         </p>
       )}
-    </>
+    </>,
+    document.body,
   );
 };
 

@@ -1,13 +1,22 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
-import type { Tema } from '../../domain/preferenze';
+import type { SceltaTema, Tema } from '../../domain/preferenze';
+
+export type TemaState = { scelta: SceltaTema; effettivo: Tema };
 
 const temaSlice = createSlice({
   name: 'tema',
-  initialState: 'light' as Tema,
+  initialState: { scelta: 'system', effettivo: 'light' } as TemaState,
   reducers: {
-    temaSelezionato: (_state, { payload }: PayloadAction<Tema>) => payload,
+    sceltaTemaCambiata: (_state, { payload }: PayloadAction<TemaState>) =>
+      payload,
+    temaDiSistemaCambiato: (
+      state,
+      { payload }: PayloadAction<Exclude<Tema, 'retro'>>,
+    ) => {
+      if (state.scelta === 'system') state.effettivo = payload;
+    },
   },
 });
 
-export const { temaSelezionato } = temaSlice.actions;
+export const { sceltaTemaCambiata, temaDiSistemaCambiato } = temaSlice.actions;
 export const temaReducer = temaSlice.reducer;

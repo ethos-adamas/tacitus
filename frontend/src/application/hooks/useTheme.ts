@@ -1,27 +1,31 @@
 import { useEffect } from 'react';
-import type { Tema } from '../../domain/preferenze';
+import type { SceltaTema } from '../../domain/preferenze';
 import {
   applyTheme,
-  followsSystemTheme,
-  loadTheme,
-  nextTheme,
-  saveTheme,
+  loadThemeChoice,
+  resolveTheme,
+  saveThemeChoice,
 } from '../../infrastructure/theme/theme';
+import { erroreMostrato } from '../store/feedbackSlice';
 import { useDispatch, useSelector } from '../store/hooks';
-import { temaSelezionato } from '../store/temaSlice';
+import { sceltaTemaCambiata, temaDiSistemaCambiato } from '../store/temaSlice';
 
 export const useTheme = (): void => {
   const dispatch = useDispatch();
 
   useEffect(() => {
     const systemTheme = matchMedia('(prefers-color-scheme: dark)');
-    const synchronizeTheme = () => {
-      const theme = loadTheme(systemTheme.matches);
+    const synchronizeTheme = (choice = loadThemeChoice()) => {
+      const theme = resolveTheme(choice, systemTheme.matches);
       applyTheme(theme);
-      dispatch(temaSelezionato(theme));
+      dispatch(sceltaTemaCambiata({ scelta: choice, effettivo: theme }));
     };
     const followSystemTheme = () => {
-      if (followsSystemTheme()) synchronizeTheme();
+      if (loadThemeChoice() === 'system') {
+        const theme = systemTheme.matches ? 'dark' : 'light';
+        applyTheme(theme);
+        dispatch(temaDiSistemaCambiato(theme));
+      }
     };
     synchronizeTheme();
     systemTheme.addEventListener('change', followSystemTheme);
@@ -29,14 +33,27 @@ export const useTheme = (): void => {
   }, [dispatch]);
 };
 
-export const useTema = (): { tema: Tema; cambiaTema: () => void } => {
+export const useTema = () => {
   const dispatch = useDispatch();
-  const tema = useSelector(state => state.tema);
-  const cambiaTema = () => {
-    const next = nextTheme(tema);
-    saveTheme(next);
-    applyTheme(next);
-    dispatch(temaSelezionato(next));
+  const { scelta, effettivo } = useSelector(state => state.tema);
+  const selezionaTema = (next: SceltaTema) => {
+    const effective = resolveTheme(
+      next,
+      matchMedia('(prefers-color-scheme: dark)').matches,
+    );
+    applyTheme(effective);
+    dispatch(sceltaTemaCambiata({ scelta: next, effettivo: effective }));
+    try {
+      saveThemeChoice(next);
+    } catch (reason) {
+      dispatch(
+        erroreMostrato(
+          reason instanceof Error
+            ? reason.message
+            : 'La scelta del tema non può essere salvata.',
+        ),
+      );
+    }
   };
-  return { tema, cambiaTema };
+  return { tema: effettivo, scelta, selezionaTema };
 };

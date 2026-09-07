@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from 'react';
+import { Button } from './kit/Button';
 
 type AppErrorBoundaryProps = {
   children: ReactNode;
@@ -28,9 +29,9 @@ class AppErrorBoundary extends Component<
             <p>
               Ricarica l’applicazione. I dati locali non verranno cancellati.
             </p>
-            <button className="primary" onClick={this.reload}>
+            <Button variant="primary" onClick={this.reload}>
               Ricarica
-            </button>
+            </Button>
           </section>
         </main>
       );

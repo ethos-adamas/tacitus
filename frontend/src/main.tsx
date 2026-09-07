@@ -4,6 +4,7 @@ import { Provider } from 'react-redux';
 import App from './App.tsx';
 import initProtocol from './generated/tacitus_protocol';
 import './index.css';
+import '@fontsource/press-start-2p/latin-400.css';
 import { store } from './application/store/store';
 import AppErrorBoundary from './ui/AppErrorBoundary';
 await initProtocol();

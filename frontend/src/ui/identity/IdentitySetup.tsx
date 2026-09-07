@@ -1,14 +1,16 @@
 import Brand from '../shell/Brand';
 import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { useGestioneIdentitaLocale } from '../../application/hooks/useIdentitaLocale';
-import { useTema } from '../../application/hooks/useTheme';
 import { erroreMostrato } from '../../application/store/feedbackSlice';
 import { useDispatch, useSelector } from '../../application/store/hooks';
+import { Button } from '../kit/Button';
+import { SettingsPopover } from '../kit/SettingsPopover';
+import ThemeSelector from '../shell/ThemeSelector';
+import { TextInput } from '../kit/Fields';
 
 const IdentitySetup = () => {
   const dispatch = useDispatch();
   const { crea } = useGestioneIdentitaLocale();
-  const { cambiaTema, tema } = useTema();
   const error = useSelector(state => state.feedback.errore);
   const [nickname, setNickname] = useState('');
 
@@ -30,47 +32,56 @@ const IdentitySetup = () => {
   };
 
   return (
-    <main className="landing">
-      <button
-        className="icon-action landing-theme"
-        onClick={cambiaTema}
-        aria-label={`Passa al tema ${tema === 'dark' ? 'chiaro' : 'scuro'}`}
-        title={`Tema ${tema === 'dark' ? 'chiaro' : 'scuro'}`}>
-        {tema === 'dark' ? '☀' : '☾'}
-      </button>
-      <section className="identity-card">
-        <Brand />
-        <h1>Messaggistica privata senza account.</h1>
-        <p>Le chiavi private non lasciano mai questo dispositivo.</p>
-        <form onSubmit={submitIdentity}>
-          <label>
-            Nickname immutabile
-            <input
-              value={nickname}
-              onChange={changeNickname}
-              minLength={3}
-              maxLength={24}
-              pattern="[a-z0-9_]+"
-              required
-              aria-describedby="nickname-help"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              autoFocus
-            />
-          </label>
-          <small id="nickname-help">
-            3–24 caratteri: lettere minuscole, numeri o underscore.
-          </small>
-          <button className="primary">Crea Identità</button>
-        </form>
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
-      </section>
-    </main>
+    <>
+      <SettingsPopover
+        trigger={
+          <Button
+            variant="ghost"
+            className="landing-settings"
+            aria-label="Impostazioni"
+            title="Impostazioni">
+            ⚙
+          </Button>
+        }>
+        <ThemeSelector />
+      </SettingsPopover>
+      <main className="landing">
+        <section className="identity-card">
+          <Brand />
+          <h1>Messaggistica privata senza account.</h1>
+          <p>Le chiavi private non lasciano mai questo dispositivo.</p>
+          <form onSubmit={submitIdentity}>
+            <label>
+              Nickname immutabile
+              <TextInput
+                value={nickname}
+                onChange={changeNickname}
+                minLength={3}
+                maxLength={24}
+                pattern="[a-z0-9_]+"
+                required
+                aria-describedby="nickname-help"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                autoFocus
+              />
+            </label>
+            <small id="nickname-help">
+              3–24 caratteri: lettere minuscole, numeri o underscore.
+            </small>
+            <Button type="submit" variant="primary">
+              Crea Identità
+            </Button>
+          </form>
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+        </section>
+      </main>
+    </>
   );
 };
 
