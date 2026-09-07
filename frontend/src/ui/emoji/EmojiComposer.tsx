@@ -1,12 +1,12 @@
 import {
   useEffect,
-  useEffectEvent,
   useRef,
   useState,
   type ChangeEvent,
+  type ClipboardEvent,
   type KeyboardEvent,
+  type ReactNode,
 } from 'react';
-import type PickerElement from 'emoji-picker-element/picker';
 import {
   EMOJI_DATA_SOURCE,
   findShortcodeToken,
@@ -17,6 +17,9 @@ import {
   type ShortcodeToken,
 } from './emoji';
 import type { Tema } from '../../domain/preferenze';
+import { Button } from '../kit/Button';
+import { TextArea } from '../kit/Fields';
+import EmojiPicker from '../kit/EmojiPicker';
 
 type Props = {
   disabled: boolean;
@@ -24,6 +27,9 @@ type Props = {
   placeholder: string;
   theme: Tema;
   value: string;
+  attachment: ReactNode;
+  onFiles: (files: File[]) => void;
+  onFilesError: (reason: unknown) => void;
   onChange: (value: string) => void;
   onSend: () => void;
 };
@@ -43,19 +49,20 @@ const SuggestionButton = ({
 }: SuggestionButtonProps) => {
   const choose = () => onChoose(suggestion);
   return (
-    <button
+    <Button
       type="button"
+      variant="ghost"
       role="option"
       aria-selected={selected}
       id={`emoji-suggestion-${index}`}
-      className={selected ? 'selected' : ''}
+      className={`!grid ${selected ? 'selected' : ''}`}
       onClick={choose}>
       <span>{suggestion.unicode}</span>
       <span>
         <strong>:{suggestion.shortcode}:</strong>
         <small>{suggestion.annotation}</small>
       </span>
-    </button>
+    </Button>
   );
 };
 
@@ -65,6 +72,9 @@ const EmojiComposer = ({
   placeholder,
   theme,
   value,
+  attachment,
+  onFiles,
+  onFilesError,
   onChange,
   onSend,
 }: Props) => {
@@ -73,7 +83,6 @@ const EmojiComposer = ({
   const [token, setToken] = useState<ShortcodeToken>();
   const [selected, setSelected] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
-  const pickerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const selectionRef = useRef({ start: value.length, end: value.length });
   const searchRef = useRef(0);
@@ -113,9 +122,7 @@ const EmojiComposer = ({
     setPickerOpen(false);
     focusAt(cursor);
   };
-  const insertFromPicker = useEffectEvent((unicode: string) =>
-    insert(unicode, null),
-  );
+  const insertFromPicker = (unicode: string) => insert(unicode, null);
 
   const chooseSuggestion = (suggestion: EmojiSuggestion) => {
     insert(suggestion.unicode);
@@ -189,24 +196,27 @@ const EmojiComposer = ({
     void updateSuggestions(textarea.value, textarea.selectionStart);
   };
 
-  useEffect(() => {
-    if (!pickerVisible) return;
-    let cancelled = false;
-    let picker: PickerElement | undefined;
-    void import('emoji-picker-element/picker').then(({ default: Picker }) => {
-      if (cancelled || !pickerRef.current) return;
-      picker = new Picker({ dataSource: EMOJI_DATA_SOURCE, locale: 'en' });
-      picker.className = theme;
-      picker.addEventListener('emoji-click', ({ detail }) => {
-        if (detail.unicode) insertFromPicker(detail.unicode);
-      });
-      pickerRef.current.replaceChildren(picker);
-    });
-    return () => {
-      cancelled = true;
-      picker?.remove();
-    };
-  }, [pickerVisible, theme]);
+  const pasteFiles = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (disabled) return;
+    const clipboard = event.clipboardData;
+    const files = Array.from(clipboard.files);
+    if (files.length) {
+      event.preventDefault();
+      onFiles(files);
+      return;
+    }
+    const fileItems = Array.from(clipboard.items).filter(
+      item => item.kind === 'file',
+    );
+    if (!fileItems.length) return;
+    const itemFiles = fileItems.map(item => item.getAsFile());
+    event.preventDefault();
+    if (itemFiles.some(file => file === null)) {
+      onFilesError(new Error('Immagine clipboard non leggibile.'));
+      return;
+    }
+    onFiles(itemFiles.filter((file): file is File => file !== null));
+  };
 
   useEffect(() => {
     if (!pickerVisible && !visibleSuggestions.length) return;
@@ -241,42 +251,57 @@ const EmojiComposer = ({
           ))}
         </div>
       )}
-      {pickerVisible && <div className="emoji-picker-panel" ref={pickerRef} />}
-      <button
+      {pickerVisible && (
+        <EmojiPicker
+          theme={theme}
+          dataSource={EMOJI_DATA_SOURCE}
+          onChoose={insertFromPicker}
+        />
+      )}
+      <div className="composer-attachment">{attachment}</div>
+      <div className="message-input">
+        <TextArea
+          ref={textareaRef}
+          aria-label="Messaggio"
+          rows={1}
+          value={value}
+          maxLength={maxLength}
+          placeholder={placeholder}
+          disabled={disabled}
+          aria-expanded={visibleSuggestions.length > 0}
+          aria-activedescendant={
+            visibleSuggestions.length
+              ? `emoji-suggestion-${selected}`
+              : undefined
+          }
+          onSelect={rememberSelection}
+          onChange={changeMessage}
+          onKeyDown={onKeyDown}
+          onPaste={pasteFiles}
+        />
+        <small>
+          {value.length}/{maxLength}
+        </small>
+        <Button
+          type="button"
+          variant="ghost"
+          className="emoji-toggle"
+          disabled={disabled}
+          aria-label="Choose an emoji"
+          aria-expanded={pickerVisible}
+          onClick={togglePicker}>
+          ☺
+        </Button>
+      </div>
+      <Button
         type="button"
-        className="emoji-toggle"
-        disabled={disabled}
-        aria-label="Choose an emoji"
-        aria-expanded={pickerVisible}
-        onClick={togglePicker}>
-        ☺
-      </button>
-      <textarea
-        ref={textareaRef}
-        aria-label="Messaggio"
-        value={value}
-        maxLength={maxLength}
-        placeholder={placeholder}
-        disabled={disabled}
-        aria-expanded={visibleSuggestions.length > 0}
-        aria-activedescendant={
-          visibleSuggestions.length ? `emoji-suggestion-${selected}` : undefined
-        }
-        onSelect={rememberSelection}
-        onChange={changeMessage}
-        onKeyDown={onKeyDown}
-      />
-      <small>
-        {value.length}/{maxLength}
-      </small>
-      <button
-        type="button"
+        variant="primary"
         className="send"
         aria-label="Invia"
         disabled={disabled || !value.trim()}
         onClick={onSend}>
         ↑
-      </button>
+      </Button>
     </div>
   );
 };

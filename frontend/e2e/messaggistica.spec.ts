@@ -72,6 +72,66 @@ const closePersonas = async (...personas: Persona[]) => {
   await Promise.all(personas.map(persona => persona.context.close()));
 };
 
+const createPng = async (page: Page, color: string, size = 32) =>
+  page.evaluate(
+    ({ color: fill, size: side }) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = side;
+      const context = canvas.getContext('2d')!;
+      context.fillStyle = fill;
+      context.fillRect(0, 0, side, side);
+      return canvas.toDataURL('image/png').split(',')[1];
+    },
+    { color, size },
+  );
+
+const pastePngs = async (page: Page, pngs: string[], withText = false) => {
+  await page.getByLabel('Messaggio').evaluate(
+    (textarea, { pngs: encoded, withText: addText }) => {
+      const transfer = new DataTransfer();
+      encoded.forEach((png, index) => {
+        const bytes = Uint8Array.from(atob(png), character =>
+          character.charCodeAt(0),
+        );
+        transfer.items.add(
+          new File([bytes], `incollata-${index}.png`, { type: 'image/png' }),
+        );
+      });
+      if (addText) transfer.setData('text/plain', 'testo clipboard');
+      const event = new Event('paste', {
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperty(event, 'clipboardData', { value: transfer });
+      textarea.dispatchEvent(event);
+    },
+    { pngs, withText },
+  );
+};
+
+const dropPngs = async (page: Page, pngs: string[]) => {
+  const transfer = await page.evaluateHandle(encoded => {
+    const dataTransfer = new DataTransfer();
+    encoded.forEach((png, index) => {
+      const bytes = Uint8Array.from(atob(png), character =>
+        character.charCodeAt(0),
+      );
+      dataTransfer.items.add(
+        new File([bytes], `trascinata-${index}.png`, { type: 'image/png' }),
+      );
+    });
+    return dataTransfer;
+  }, pngs);
+  try {
+    const target = page.getByLabel('Messaggio');
+    await target.dispatchEvent('dragenter', { dataTransfer: transfer });
+    await target.dispatchEvent('dragover', { dataTransfer: transfer });
+    await target.dispatchEvent('drop', { dataTransfer: transfer });
+  } finally {
+    await transfer.dispose();
+  }
+};
+
 test.describe('use case della Messaggistica privata', () => {
   test('un Intento non ricambiato rimane in attesa e può essere annullato', async ({
     browser,
@@ -141,10 +201,15 @@ test.describe('use case della Messaggistica privata', () => {
     const bob = await createPersona(browser, 'bob_remove');
     await matchContacts(alice, bob);
     await alice.page.getByRole('button', { name: /bob_remove/ }).click();
-    alice.page.once('dialog', dialog => dialog.accept());
 
     // When
-    await alice.page.getByRole('button', { name: 'Rimuovi' }).click();
+    await alice.page
+      .getByRole('button', { name: 'Impostazioni del Contatto' })
+      .click();
+    await alice.page.getByRole('button', { name: 'Rimuovi Contatto' }).click();
+    await alice.page
+      .getByRole('button', { name: 'Rimuovi definitivamente' })
+      .click();
 
     // Then
     await expect(bob.page.getByText('Riattivazione necessaria')).toBeVisible();
@@ -167,10 +232,15 @@ test.describe('use case della Messaggistica privata', () => {
     const bob = await createPersona(browser, 'bob_block');
     await matchContacts(alice, bob);
     await alice.page.getByRole('button', { name: /bob_block/ }).click();
-    alice.page.once('dialog', dialog => dialog.accept());
 
     // When
-    await alice.page.getByRole('button', { name: 'Blocca' }).click();
+    await alice.page
+      .getByRole('button', { name: 'Impostazioni del Contatto' })
+      .click();
+    await alice.page.getByRole('button', { name: 'Blocca Contatto' }).click();
+    await alice.page
+      .getByRole('button', { name: 'Blocca definitivamente' })
+      .click();
 
     // Then
     await expect(alice.page.getByText('Identità bloccate')).toBeVisible();
@@ -191,7 +261,7 @@ test.describe('use case della Messaggistica privata', () => {
     await closePersonas(alice, bob);
   });
 
-  test('il tema segue il sistema e può essere cambiato', async ({
+  test('il tema segue il sistema e può essere cambiato dalle impostazioni', async ({
     browser,
   }) => {
     // Given
@@ -204,12 +274,26 @@ test.describe('use case della Messaggistica privata', () => {
 
     // When
     const initialTheme = await page.locator('html').getAttribute('data-theme');
-    await page.getByRole('button', { name: 'Passa al tema chiaro' }).click();
+    await page.getByLabel('Impostazioni', { exact: true }).click();
+    await page.getByLabel('Tema').selectOption('light');
 
     // Then
     expect(initialTheme).toBe('dark');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await page.getByLabel('Tema').selectOption('retro');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'retro');
     await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'retro');
+    await page.emulateMedia({ colorScheme: 'light' });
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'retro');
+    const settings = page.getByLabel('Impostazioni', { exact: true });
+    const settingsBox = await settings.boundingBox();
+    expect(settingsBox).toBeTruthy();
+    await page.mouse.click(
+      settingsBox!.x + settingsBox!.width / 2,
+      settingsBox!.y + settingsBox!.height / 2,
+    );
+    await page.getByLabel('Tema').selectOption('system');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await context.close();
   });
@@ -348,9 +432,7 @@ test('le impostazioni sono raccolte sotto l’ingranaggio', async ({
   await expect(
     alice.page.getByRole('button', { name: 'Cancella dati' }),
   ).toBeVisible();
-  await expect(
-    alice.page.getByRole('button', { name: /Passa al tema/ }),
-  ).toBeVisible();
+  await expect(alice.page.getByLabel('Tema')).toHaveValue('system');
   await expect(
     alice.page.getByRole('button', { name: 'Abilita notifiche' }),
   ).toBeVisible();
@@ -604,6 +686,7 @@ test('Album: consenso iniziale, accettazione successiva, persistenza e revoca', 
   );
   // When: revoke this contact
   await bob.page.getByLabel('Foto da questo Contatto').selectOption('block');
+  await bob.page.getByRole('button', { name: 'Chiudi' }).last().click();
   await alice.page.getByLabel('Scegli foto').setInputFiles(files.slice(0, 1));
   await alice.page.getByRole('button', { name: 'Invia album' }).click();
   // Then
@@ -612,9 +695,13 @@ test('Album: consenso iniziale, accettazione successiva, persistenza e revoca', 
   ).toBeVisible();
   await expect(bob.page.locator('.album-gallery img')).toHaveCount(3);
   // When: global block overrides per-contact acceptance
+  await bob.page
+    .getByLabel('Impostazioni del Contatto', { exact: true })
+    .click();
   await bob.page.getByLabel('Foto da questo Contatto').selectOption('allow');
+  await bob.page.getByRole('button', { name: 'Chiudi' }).last().click();
   await bob.page.getByLabel('Impostazioni', { exact: true }).click();
-  await bob.page.getByLabel('Ricevi foto e album').uncheck();
+  await bob.page.getByText('Ricevi foto e album', { exact: true }).click();
   await bob.page.getByLabel('Impostazioni', { exact: true }).click();
   await alice.page.getByLabel('Scegli foto').setInputFiles(files.slice(0, 1));
   await alice.page.getByRole('button', { name: 'Invia album' }).click();
@@ -626,8 +713,10 @@ test('Album: consenso iniziale, accettazione successiva, persistenza e revoca', 
     .getByLabel('Impostazioni del Contatto', { exact: true })
     .click();
   // Then: removing a contact deletes encrypted assets too
-  bob.page.once('dialog', dialog => dialog.accept());
-  await bob.page.getByRole('button', { name: 'Rimuovi', exact: true }).click();
+  await bob.page.getByRole('button', { name: 'Rimuovi Contatto' }).click();
+  await bob.page
+    .getByRole('button', { name: 'Rimuovi definitivamente' })
+    .click();
   await expect
     .poll(() =>
       bob.page.evaluate(
@@ -650,6 +739,291 @@ test('Album: consenso iniziale, accettazione successiva, persistenza e revoca', 
       ),
     )
     .toBe(0);
+  await closePersonas(alice, bob);
+});
+
+test('Album: anteprima con zoom continuo e download esplicito', async ({
+  browser,
+}) => {
+  test.skip(
+    test.info().project.name !== 'chromium-desktop',
+    'Rotellina e pan sono verificati nel progetto desktop; il progetto mobile copre il pinch.',
+  );
+  test.setTimeout(90_000);
+  // Given
+  const alice = await createPersona(browser, 'alice_viewer');
+  const bob = await createPersona(browser, 'bob_viewer');
+  await matchContacts(alice, bob);
+  await bob.page.getByRole('button', { name: /alice_viewer/ }).click();
+  await bob.page
+    .getByRole('button', { name: 'Impostazioni del Contatto' })
+    .click();
+  await bob.page.getByLabel('Foto da questo Contatto').selectOption('allow');
+  await bob.page.getByRole('button', { name: 'Chiudi' }).last().click();
+  await alice.page.getByRole('button', { name: /bob_viewer/ }).click();
+  const png = await createPng(alice.page, '#2f8f67', 1200);
+  await alice.page.getByLabel('Scegli foto').setInputFiles({
+    name: 'foto-viewer.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(png, 'base64'),
+  });
+  await alice.page.getByRole('button', { name: 'Invia album' }).click();
+  await expect(alice.page.locator('.album-gallery img')).toHaveCount(1, {
+    timeout: 30_000,
+  });
+
+  // When: opening the thumbnail must not download anything
+  let automaticDownload = false;
+  const rememberDownload = () => {
+    automaticDownload = true;
+  };
+  alice.page.on('download', rememberDownload);
+  await alice.page.getByRole('button', { name: 'Apri Foto 1' }).click();
+  await expect(alice.page.getByRole('dialog')).toBeVisible();
+  await alice.page.waitForTimeout(200);
+  alice.page.off('download', rememberDownload);
+
+  // Then: wheel changes the real transform and reset restores the fit
+  const zoomArea = alice.page.locator('.photo-viewer-zoom-area');
+  await expect(zoomArea).toBeVisible();
+  const readTransform = () =>
+    zoomArea.locator('.photo-viewer-zoom-content').evaluate(element => {
+      const matrix = new DOMMatrix(getComputedStyle(element).transform);
+      const image = element.querySelector('img')!.getBoundingClientRect();
+      return { scale: matrix.a, width: image.width, x: matrix.e };
+    });
+  const initial = await readTransform();
+  const area = await zoomArea.boundingBox();
+  expect(area).toBeTruthy();
+  await zoomArea.hover();
+  await alice.page.mouse.move(
+    area!.x + area!.width / 2,
+    area!.y + area!.height / 2,
+  );
+  await zoomArea.dispatchEvent('wheel', {
+    deltaY: -300,
+    clientX: area!.x + area!.width / 2,
+    clientY: area!.y + area!.height / 2,
+  });
+  await expect
+    .poll(async () => (await readTransform()).scale)
+    .toBeGreaterThan(initial.scale);
+  const zoomed = await readTransform();
+  expect(zoomed.width).toBeGreaterThan(initial.width);
+  await zoomArea.dispatchEvent('mousedown', {
+    button: 0,
+    clientX: area!.x + area!.width / 2,
+    clientY: area!.y + area!.height / 2,
+  });
+  await zoomArea.dispatchEvent('mousemove', {
+    buttons: 1,
+    clientX: area!.x + area!.width / 2 - 100,
+    clientY: area!.y + area!.height / 2,
+  });
+  await zoomArea.dispatchEvent('mouseup', {
+    button: 0,
+    clientX: area!.x + area!.width / 2 - 100,
+    clientY: area!.y + area!.height / 2,
+  });
+  await expect.poll(async () => (await readTransform()).x).not.toBe(zoomed.x);
+  await alice.page.getByRole('button', { name: 'Ripristina zoom' }).click();
+  await expect
+    .poll(async () => (await readTransform()).scale)
+    .toBeCloseTo(initial.scale, 2);
+  expect(automaticDownload).toBe(false);
+
+  // When / Then: only the explicit control downloads the file
+  const downloadPromise = alice.page.waitForEvent('download');
+  await alice.page.getByRole('link', { name: 'Scarica foto' }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('foto-1.webp');
+  await alice.page.keyboard.press('Escape');
+  await expect(alice.page.getByRole('dialog')).toBeHidden();
+  await closePersonas(alice, bob);
+});
+
+test('Album: anteprima pinch emulato su Chromium mobile', async ({
+  browser,
+}) => {
+  test.skip(
+    test.info().project.name !== 'chromium-mobile',
+    'Il pinch CDP richiede il progetto mobile.',
+  );
+  test.setTimeout(90_000);
+  // Given
+  const alice = await createPersona(browser, 'alice_pinch');
+  const bob = await createPersona(browser, 'bob_pinch');
+  await matchContacts(alice, bob);
+  await bob.page.getByRole('button', { name: /alice_pinch/ }).click();
+  await bob.page
+    .getByRole('button', { name: 'Impostazioni del Contatto' })
+    .click();
+  await bob.page.getByLabel('Foto da questo Contatto').selectOption('allow');
+  await bob.page.getByRole('button', { name: 'Chiudi' }).last().click();
+  await alice.page.getByRole('button', { name: /bob_pinch/ }).click();
+  const png = await createPng(alice.page, '#4b65b5', 1200);
+  await alice.page.getByLabel('Scegli foto').setInputFiles({
+    name: 'foto-pinch.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(png, 'base64'),
+  });
+  await alice.page.getByRole('button', { name: 'Invia album' }).click();
+  await expect(alice.page.locator('.album-gallery img')).toHaveCount(1, {
+    timeout: 30_000,
+  });
+  await alice.page.getByRole('button', { name: 'Apri Foto 1' }).click();
+  await expect(alice.page.locator('.photo-viewer-zoom-area')).toBeVisible();
+  const area = await alice.page
+    .locator('.photo-viewer-zoom-area')
+    .boundingBox();
+  expect(area).toBeTruthy();
+  const readScale = () =>
+    alice.page.locator('.photo-viewer-zoom-content').evaluate(element => {
+      const matrix = new DOMMatrix(getComputedStyle(element).transform);
+      return matrix.a;
+    });
+  const initial = await readScale();
+  const session = await alice.page.context().newCDPSession(alice.page);
+  const centerX = area!.x + area!.width / 2;
+  const centerY = area!.y + area!.height / 2;
+  try {
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [
+        { id: 1, x: centerX - 20, y: centerY },
+        { id: 2, x: centerX + 20, y: centerY },
+      ],
+    });
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [
+        { id: 1, x: centerX - 100, y: centerY },
+        { id: 2, x: centerX + 100, y: centerY },
+      ],
+    });
+    await session.send('Input.dispatchTouchEvent', {
+      type: 'touchEnd',
+      touchPoints: [],
+    });
+  } finally {
+    await session.detach();
+  }
+  await expect.poll(readScale).toBeGreaterThan(initial);
+  await alice.page.keyboard.press('Escape');
+  await expect(alice.page.getByRole('dialog')).toBeHidden();
+  await closePersonas(alice, bob);
+});
+
+test('Album: incolla immagini nella stessa anteprima del picker', async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  // Given
+  const alice = await createPersona(browser, 'alice_paste');
+  const bob = await createPersona(browser, 'bob_paste');
+  await matchContacts(alice, bob);
+  await alice.page.getByRole('button', { name: /bob_paste/ }).click();
+  const png = await createPng(alice.page, '#2f8f67');
+  await alice.page.getByLabel('Messaggio').fill('abc');
+  await alice.page.getByLabel('Messaggio').evaluate(textarea => {
+    if (!(textarea instanceof HTMLTextAreaElement))
+      throw new Error('Il campo Messaggio non è una textarea.');
+    textarea.setSelectionRange(1, 2);
+  });
+
+  // When
+  await pastePngs(alice.page, [png], true);
+
+  // Then
+  await expect(
+    alice.page.getByAltText('Anteprima 1', { exact: true }),
+  ).toBeVisible();
+  await expect(alice.page.getByLabel('Messaggio')).toHaveValue('abc');
+  await expect(bob.page.locator('.album-gallery img')).toHaveCount(0);
+  const selection = await alice.page
+    .getByLabel('Messaggio')
+    .evaluate(textarea => {
+      if (!(textarea instanceof HTMLTextAreaElement))
+        throw new Error('Il campo Messaggio non è una textarea.');
+      return [textarea.selectionStart, textarea.selectionEnd];
+    });
+  expect(selection).toEqual([1, 2]);
+
+  // When: a group exceeding the remaining capacity is pasted
+  await alice.page.getByRole('button', { name: 'Annulla album' }).click();
+  const photo = {
+    name: 'base.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(png, 'base64'),
+  };
+  await alice.page
+    .getByLabel('Scegli foto')
+    .setInputFiles(Array(9).fill(photo));
+  await expect(
+    alice.page.getByAltText('Anteprima 9', { exact: true }),
+  ).toBeVisible();
+  await pastePngs(alice.page, [png, png, png]);
+
+  // Then
+  await expect(alice.page.getByRole('alert')).toContainText(
+    'Puoi aggiungere ancora 1 foto.',
+  );
+  await expect(alice.page.locator('.album-preview img')).toHaveCount(9);
+  await closePersonas(alice, bob);
+});
+
+test('Album: trascinamento foto converge con picker e incolla', async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  // Given
+  const alice = await createPersona(browser, 'alice_drop');
+  const bob = await createPersona(browser, 'bob_drop');
+  await matchContacts(alice, bob);
+  await alice.page.getByRole('button', { name: /bob_drop/ }).click();
+  const pickerPng = await createPng(alice.page, '#2f8f67');
+  const pastePng = await createPng(alice.page, '#b97836');
+  const dropPng = await createPng(alice.page, '#4b65b5');
+  const photo = {
+    name: 'picker.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(pickerPng, 'base64'),
+  };
+
+  // When
+  await alice.page.getByLabel('Scegli foto').setInputFiles(photo);
+  await pastePngs(alice.page, [pastePng]);
+  await dropPngs(alice.page, [dropPng]);
+
+  // Then
+  await expect(
+    alice.page.getByAltText('Anteprima 3', { exact: true }),
+  ).toBeVisible();
+  await expect(bob.page.locator('.album-gallery img')).toHaveCount(0);
+
+  // When: a file is released outside the composer
+  const url = alice.page.url();
+  const outside = await alice.page.evaluateHandle(encoded => {
+    const dataTransfer = new DataTransfer();
+    const bytes = Uint8Array.from(atob(encoded), character =>
+      character.charCodeAt(0),
+    );
+    dataTransfer.items.add(
+      new File([bytes], 'fuori.png', { type: 'image/png' }),
+    );
+    return dataTransfer;
+  }, dropPng);
+  try {
+    await alice.page.locator('aside').dispatchEvent('drop', {
+      dataTransfer: outside,
+    });
+  } finally {
+    await outside.dispose();
+  }
+
+  // Then
+  expect(alice.page.url()).toBe(url);
+  await expect(alice.page.locator('.album-preview img')).toHaveCount(3);
   await closePersonas(alice, bob);
 });
 
