@@ -1,4 +1,4 @@
-import { AlbumComposer, AlbumConsent, AlbumGallery } from './Album';
+import { AlbumGallery } from './Album';
 import type { TacitusId } from '../../domain/tacitusId';
 import { useEffect, useRef } from 'react';
 import { useConversazioneAttiva } from '../../application/hooks/useConversazioneAttiva';
@@ -9,7 +9,9 @@ import { useSelector } from '../../application/store/hooks';
 import type { Conversazione as ConversazioneModel } from '../../domain/conversazioni';
 import { MAX_MESSAGE_LENGTH, type Messaggio } from '../../domain/messaggi';
 import type { Contatto, Relazione } from '../../domain/relazioni';
-import EmojiComposer from '../emoji/EmojiComposer';
+import ContactSettingsDialog from '../contacts/ContactSettingsDialog';
+import { Button } from '../kit/Button';
+import MessageComposer from './MessageComposer';
 
 type MessageProps = { message: Messaggio; tacitusId: TacitusId };
 
@@ -17,7 +19,11 @@ const Message = ({ message, tacitusId }: MessageProps) => (
   <article
     className={`message ${message.direzione === 'ricevuto' ? 'incoming' : 'outgoing'}`}>
     {message.album ? (
-      <AlbumGallery tacitusId={tacitusId} id={message.album.id} />
+      <AlbumGallery
+        key={`${tacitusId}-${message.album.id}`}
+        tacitusId={tacitusId}
+        id={message.album.id}
+      />
     ) : (
       <p>{message.testo}</p>
     )}
@@ -46,25 +52,13 @@ const ConversationContent = ({
   onBack,
 }: ConversationContentProps) => {
   const connection = useSelector(state => state.connessioneRelay);
-  const theme = useSelector(state => state.tema);
+  const theme = useSelector(state => state.tema.effettivo);
   const secureSession = useSessioniSicure(contact.tacitusId);
-  const { bloccaContatto, riattiva, rimuoviContatto } = useRelazioni();
+  const { riattiva } = useRelazioni();
   const { aggiornaBozza, invia } = useScambioMessaggi(contact.tacitusId);
   const messagesEnd = useRef<HTMLDivElement>(null);
 
   const reactivate = () => riattiva(contact.tacitusId);
-
-  const remove = () => {
-    if (confirm(`Rimuovere ${contact.nickname} e la Conversazione locale?`)) {
-      rimuoviContatto(contact.tacitusId);
-    }
-  };
-
-  const block = () => {
-    if (confirm(`Bloccare ${contact.nickname} e rimuovere la Conversazione?`)) {
-      bloccaContatto(contact.tacitusId);
-    }
-  };
 
   useEffect(() => {
     const history = messagesEnd.current?.parentElement;
@@ -74,29 +68,24 @@ const ConversationContent = ({
   return (
     <>
       <div className="conversation-title">
-        <button className="back" onClick={onBack}>
+        <Button variant="ghost" className="back" onClick={onBack}>
           ←
-        </button>
+        </Button>
         <span className="avatar">{contact.nickname[0].toUpperCase()}</span>
         <div>
           <h2>{contact.nickname}</h2>
           <code>{contact.tacitusId}</code>
         </div>
-        <details className="contact-settings">
-          <summary aria-label="Impostazioni del Contatto">⚙</summary>
-          <AlbumConsent tacitusId={contact.tacitusId} />
-        </details>
         {relationship.stato === 'da-riattivare' && !contactIntentPending && (
-          <button disabled={connection !== 'online'} onClick={reactivate}>
+          <Button disabled={connection !== 'online'} onClick={reactivate}>
             Riattiva
-          </button>
+          </Button>
         )}
-        <button className="danger remove" onClick={remove}>
-          Rimuovi
-        </button>
-        <button className="danger" onClick={block}>
-          Blocca
-        </button>
+        <ContactSettingsDialog
+          key={contact.tacitusId}
+          tacitusId={contact.tacitusId}
+          nickname={contact.nickname}
+        />
       </div>
       <div className="messages">
         {conversation.messaggi.length === 0 && (
@@ -112,13 +101,9 @@ const ConversationContent = ({
         <div ref={messagesEnd} />
       </div>
       <div className="conversation-composer">
-        <AlbumComposer
-          key={`album-${contact.tacitusId}`}
-          tacitusId={contact.tacitusId}
-          disabled={secureSession !== 'pronta'}
-        />
-        <EmojiComposer
+        <MessageComposer
           key={contact.tacitusId}
+          tacitusId={contact.tacitusId}
           value={conversation.bozza}
           maxLength={MAX_MESSAGE_LENGTH}
           placeholder={
