@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react';
 import { ricezioneFotoCambiata } from '../../application/store/albumSlice';
 import Brand from './Brand';
 import { useGestioneIdentitaLocale } from '../../application/hooks/useIdentitaLocale';
@@ -21,6 +22,8 @@ const AppHeader = () => {
   const identitaState = useSelector(state => state.identitaLocale);
   const { cancella } = useGestioneIdentitaLocale();
   const { cambiaNotifiche, notifiche } = useImpostazioniNotifiche();
+  const [notificationsPending, setNotificationsPending] = useState(false);
+  const notificationsPendingRef = useRef(false);
 
   if (identitaState.stato !== 'pronta') {
     throw new Error('Identità locale assente nell’applicazione autenticata.');
@@ -39,13 +42,39 @@ const AppHeader = () => {
   const togglePhotos = (enabled: boolean) =>
     dispatch(ricezioneFotoCambiata(enabled));
 
-  const toggleNotifications = async () => {
+  const changeNotifications = async (nextChecked: boolean) => {
+    if (
+      nextChecked === notifiche.abilitate ||
+      notificationsPendingRef.current ||
+      notifiche.permesso === 'denied' ||
+      notifiche.permesso === 'unsupported'
+    )
+      return;
+    notificationsPendingRef.current = true;
+    setNotificationsPending(true);
     try {
       await cambiaNotifiche();
     } catch {
       dispatch(erroreMostrato('Configurazione delle notifiche non riuscita.'));
+    } finally {
+      notificationsPendingRef.current = false;
+      setNotificationsPending(false);
     }
   };
+
+  const notificationsHelp = notificationsPending
+    ? 'Richiesta del permesso…'
+    : notifiche.permesso === 'denied'
+      ? 'Notifiche bloccate: consentile nelle impostazioni del browser.'
+      : notifiche.permesso === 'unsupported'
+        ? 'Notifiche non supportate in questo ambiente.'
+        : notifiche.permesso === 'granted'
+          ? 'Le notifiche sono disponibili mentre l’applicazione è aperta.'
+          : 'Attivando Notifiche, il browser può chiedere il permesso.';
+  const notificationsDisabled =
+    notificationsPending ||
+    notifiche.permesso === 'denied' ||
+    notifiche.permesso === 'unsupported';
 
   return (
     <header>
@@ -77,28 +106,17 @@ const AppHeader = () => {
               label="Ricevi foto e album"
               onCheckedChange={togglePhotos}
             />
-            <Button
-              variant="ghost"
-              onClick={toggleNotifications}
-              disabled={
-                notifiche.permesso === 'denied' ||
-                notifiche.permesso === 'unsupported'
-              }
-              aria-pressed={notifiche.abilitate}
-              aria-label={
-                notifiche.abilitate
-                  ? 'Disattiva notifiche'
-                  : 'Abilita notifiche'
-              }
-              title={
-                notifiche.permesso === 'denied'
-                  ? 'Notifiche bloccate nelle impostazioni del dispositivo'
-                  : notifiche.abilitate
-                    ? 'Disattiva notifiche'
-                    : 'Abilita notifiche'
-              }>
-              {notifiche.abilitate ? '🔔' : '🔕'}
-            </Button>
+            <CheckboxField
+              id="notifications-setting"
+              label="Notifiche"
+              checked={notifiche.abilitate}
+              disabled={notificationsDisabled}
+              onCheckedChange={changeNotifications}
+              descriptionId="notifications-help"
+            />
+            <p id="notifications-help" className="settings-help">
+              {notificationsHelp}
+            </p>
             <ConfirmDialog
               trigger={<Button variant="danger">Cancella dati</Button>}
               title="Cancellare definitivamente i dati?"

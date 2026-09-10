@@ -33,7 +33,7 @@ export const AlertDialogContent = forwardRef<
   <AlertDialogPrimitive.AlertDialog.Content
     ref={ref}
     className={cn(
-      'fixed left-1/2 top-1/2 z-[60] grid max-h-[calc(100dvh-2rem)] w-[min(500px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl border border-border bg-card p-6 text-card-foreground shadow-xl focus:outline-none',
+      'fixed left-1/2 top-1/2 z-[60] grid max-h-[calc(100dvh-2rem)] w-[min(500px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl border border-border bg-card p-4 text-card-foreground shadow-xl focus:outline-none sm:p-6',
       className,
     )}
     {...props}

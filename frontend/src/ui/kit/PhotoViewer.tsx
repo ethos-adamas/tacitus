@@ -1,8 +1,8 @@
-import { useEffect, useState, type SyntheticEvent } from 'react';
+import { useEffect, useId, useState, type SyntheticEvent } from 'react';
 import {
   TransformComponent,
   TransformWrapper,
-  type ReactZoomPanPinchContentRef,
+  type ReactZoomPanPinchRef,
 } from 'react-zoom-pan-pinch';
 import { Button, DownloadLink } from './Button';
 import { Modal } from './Modal';
@@ -47,8 +47,9 @@ const PhotoViewer = ({ alt, downloadName, src }: PhotoViewerProps) => {
   const [stage, setStage] = useState<Size>();
   const [decodeError, setDecodeError] = useState(false);
   const [scale, setScale] = useState(0);
-  const [transform, setTransform] = useState<ReactZoomPanPinchContentRef>();
+  const [transform, setTransform] = useState<ReactZoomPanPinchRef>();
   const [stageElement, setStageElement] = useState<HTMLDivElement | null>(null);
+  const keyboardHelpId = useId();
   const fit =
     natural && stage
       ? calculateFit(stage.width, stage.height, natural.width, natural.height)
@@ -109,6 +110,15 @@ const PhotoViewer = ({ alt, downloadName, src }: PhotoViewerProps) => {
   const reset = () => {
     if (transform && fit) void transform.setTransform(fit.x, fit.y, fit.fit, 0);
   };
+  const initializeTransform = (ref: ReactZoomPanPinchRef) => {
+    setTransform(() => ref);
+  };
+  const updateTransform = (
+    _ref: ReactZoomPanPinchRef,
+    state: { scale: number; positionX: number; positionY: number },
+  ) => {
+    setScale(state.scale);
+  };
 
   return (
     <Modal
@@ -167,18 +177,20 @@ const PhotoViewer = ({ alt, downloadName, src }: PhotoViewerProps) => {
               velocityAnimation={{ disabled: true }}
               autoAlignment={{ disabled: true, animationTime: 0 }}
               keyboard={{
+                disabled: false,
                 panStep: 40,
                 zoomStep: fit.fit * 0.2,
                 animationTime: 0,
               }}
-              onInit={ref => setTransform(() => ref)}
-              onTransform={(_ref, state) => setScale(state.scale)}>
+              onInit={initializeTransform}
+              onTransform={updateTransform}>
               <TransformComponent
                 wrapperClass="photo-viewer-zoom-area"
                 contentClass="photo-viewer-zoom-content"
                 wrapperProps={{
                   tabIndex: 0,
                   'aria-label': 'Foto ingrandita',
+                  'aria-describedby': keyboardHelpId,
                 }}>
                 <img
                   className="photo-viewer-image"
@@ -194,6 +206,9 @@ const PhotoViewer = ({ alt, downloadName, src }: PhotoViewerProps) => {
           )}
         </div>
         <div className="photo-viewer-toolbar" aria-label="Controlli foto">
+          <small id={keyboardHelpId} className="photo-viewer-keyboard-help">
+            +/− ingrandisci, frecce spostano, 0 ripristina.
+          </small>
           <Button
             type="button"
             onClick={zoomOut}

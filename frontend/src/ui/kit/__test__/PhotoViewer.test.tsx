@@ -1,8 +1,18 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, expect, it } from 'vitest';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
 import PhotoViewer, { calculateFit } from '../PhotoViewer';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 it('calcola il fit orizzontale e il limite massimo quattro volte', () => {
   // Given
@@ -64,4 +74,74 @@ it('mantiene disponibile la chiusura quando la foto non è decodificabile', () =
   );
   fireEvent.click(screen.getAllByRole('button', { name: 'Chiudi' }).at(-1)!);
   expect(screen.queryByRole('dialog')).toBeNull();
+});
+
+it('collega un aiuto tastiera visibile con un ID distinto per ogni viewer', async () => {
+  // Given
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  const originalRect = HTMLElement.prototype.getBoundingClientRect;
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+    function (this: HTMLElement) {
+      if (this.classList.contains('photo-viewer-stage'))
+        return {
+          width: 500,
+          height: 400,
+          top: 0,
+          left: 0,
+          right: 500,
+          bottom: 400,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect;
+      return originalRect.call(this);
+    },
+  );
+  render(
+    <>
+      <PhotoViewer
+        src="data:image/webp;base64,AAAA"
+        alt="Foto 1"
+        downloadName="foto-1.webp"
+      />
+      <PhotoViewer
+        src="data:image/webp;base64,BBBB"
+        alt="Foto 2"
+        downloadName="foto-2.webp"
+      />
+    </>,
+  );
+
+  // When
+  for (const trigger of screen.getAllByRole('button', {
+    name: /^Apri Foto [12]$/,
+  }))
+    fireEvent.click(trigger);
+  const preloads = Array.from(
+    document.querySelectorAll<HTMLImageElement>('.photo-viewer-preload'),
+  );
+  for (const preload of preloads) {
+    Object.defineProperties(preload, {
+      naturalWidth: { configurable: true, value: 1000 },
+      naturalHeight: { configurable: true, value: 800 },
+    });
+    fireEvent.load(preload);
+  }
+
+  // Then
+  await waitFor(() =>
+    expect(screen.getAllByLabelText('Foto ingrandita')).toHaveLength(2),
+  );
+  const helpIds = screen
+    .getAllByText('+/− ingrandisci, frecce spostano, 0 ripristina.')
+    .map(element => element.id);
+  expect(new Set(helpIds).size).toBe(2);
+  for (const wrapper of screen.getAllByLabelText('Foto ingrandita'))
+    expect(helpIds).toContain(wrapper.getAttribute('aria-describedby'));
 });

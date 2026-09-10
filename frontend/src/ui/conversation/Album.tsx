@@ -205,8 +205,9 @@ export const AlbumTransferStatus = ({
   const accept = () => rispondiAlbum(tacitusId, true);
   const reject = () => rifiutaFoto(tacitusId);
   const cancelTransfer = () => annullaAlbum(tacitusId);
+  if (!offer && !progress) return null;
   return (
-    <>
+    <div className="album-transfer-status">
       {offer && (
         <div className="album-consent" role="status">
           <p>Accettare foto da questo Contatto?</p>
@@ -215,22 +216,26 @@ export const AlbumTransferStatus = ({
             accettate. Puoi revocare il consenso nelle impostazioni del
             Contatto.
           </small>
-          <Button type="button" onClick={accept}>
-            Accetta foto
-          </Button>
-          <Button type="button" onClick={reject}>
-            Rifiuta foto
-          </Button>
+          <div className="album-transfer-actions">
+            <Button type="button" onClick={accept}>
+              Accetta foto
+            </Button>
+            <Button type="button" onClick={reject}>
+              Rifiuta foto
+            </Button>
+          </div>
         </div>
       )}
       {progress && (
-        <div role="status">
-          {progress}
-          <Button type="button" onClick={cancelTransfer}>
-            Interrompi album
-          </Button>
+        <div className="album-progress" role="status">
+          <p>{progress}</p>
+          <div className="album-transfer-actions">
+            <Button type="button" onClick={cancelTransfer}>
+              Interrompi album
+            </Button>
+          </div>
         </div>
       )}
-    </>
+    </div>
   );
 };

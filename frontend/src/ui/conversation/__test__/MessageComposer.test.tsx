@@ -2,10 +2,14 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { Provider } from 'react-redux';
 import { createTestStore } from '../../../application/store/store';
+import {
+  offertaAlbumRicevuta,
+  progressoAlbumCambiato,
+} from '../../../application/store/albumSlice';
 import { parseTacitusId } from '../../../domain/tacitusId';
 import MessageComposer from '../MessageComposer';
 
-const { album } = vi.hoisted(() => ({
+const { album, transfers } = vi.hoisted(() => ({
   album: {
     foto: [{ id: 'foto-1', src: 'data:image/webp;base64,AAAA' }],
     preparing: false,
@@ -17,14 +21,27 @@ const { album } = vi.hoisted(() => ({
     onCancel: vi.fn(),
     onSend: vi.fn(),
   },
+  transfers: {
+    annullaAlbum: vi.fn(),
+    rifiutaFoto: vi.fn(),
+    rispondiAlbum: vi.fn(),
+  },
 }));
 vi.mock('../../../application/hooks/useAnteprimaAlbum', () => ({
   useAnteprimaAlbum: () => album,
 }));
+vi.mock(
+  '../../../application/album/trasferimentiAlbum',
+  async importOriginal => ({
+    ...(await importOriginal()),
+    ...transfers,
+  }),
+);
 
 afterEach(() => {
   cleanup();
   album.photosDisabled = false;
+  album.foto = [{ id: 'foto-1', src: 'data:image/webp;base64,AAAA' }];
   vi.clearAllMocks();
 });
 
@@ -86,4 +103,93 @@ it('disabilita il percorso foto e invio testo quando la Sessione non è pronta',
     (screen.getByRole('button', { name: 'Invia' }) as HTMLButtonElement)
       .disabled,
   ).toBe(true);
+});
+
+it('non monta un pannello di trasferimento quando non ci sono stati attivi', () => {
+  // Given
+  album.foto = [];
+  render(
+    <Provider store={createTestStore()}>
+      <MessageComposer
+        tacitusId={tacitusId}
+        value=""
+        theme="light"
+        disabled={false}
+        placeholder="Scrivi"
+        maxLength={100}
+        onChange={vi.fn()}
+        onSend={vi.fn()}
+      />
+    </Provider>,
+  );
+
+  // When / Then
+  expect(screen.queryByRole('status')).toBeNull();
+  expect(screen.queryByRole('region', { name: 'Anteprima Album' })).toBeNull();
+});
+
+it('raggruppa i comandi del trasferimento e conserva i relativi handler', () => {
+  // Given
+  album.foto = [];
+  const store = createTestStore();
+  store.dispatch(offertaAlbumRicevuta({ tacitusId, id: 'album-1', count: 2 }));
+  render(
+    <Provider store={store}>
+      <MessageComposer
+        tacitusId={tacitusId}
+        value=""
+        theme="light"
+        disabled={false}
+        placeholder="Scrivi"
+        maxLength={100}
+        onChange={vi.fn()}
+        onSend={vi.fn()}
+      />
+    </Provider>,
+  );
+
+  // When
+  fireEvent.click(screen.getByRole('button', { name: 'Accetta foto' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Rifiuta foto' }));
+
+  // Then
+  expect(screen.getByRole('status').className).toContain('album-consent');
+  expect(
+    screen.getByRole('status').querySelector('.album-transfer-actions'),
+  ).not.toBeNull();
+  expect(transfers.rispondiAlbum).toHaveBeenCalledWith(tacitusId, true);
+  expect(transfers.rifiutaFoto).toHaveBeenCalledWith(tacitusId);
+});
+
+it('mostra il progresso nel gruppo annullabile del trasferimento', () => {
+  // Given
+  album.foto = [];
+  const store = createTestStore();
+  store.dispatch(
+    progressoAlbumCambiato({
+      tacitusId,
+      testo: 'Invio foto 1 di 2…',
+    }),
+  );
+  render(
+    <Provider store={store}>
+      <MessageComposer
+        tacitusId={tacitusId}
+        value=""
+        theme="light"
+        disabled={false}
+        placeholder="Scrivi"
+        maxLength={100}
+        onChange={vi.fn()}
+        onSend={vi.fn()}
+      />
+    </Provider>,
+  );
+
+  // When
+  fireEvent.click(screen.getByRole('button', { name: 'Interrompi album' }));
+
+  // Then
+  expect(screen.getByRole('status').className).toContain('album-progress');
+  expect(transfers.annullaAlbum).toHaveBeenCalledWith(tacitusId);
 });

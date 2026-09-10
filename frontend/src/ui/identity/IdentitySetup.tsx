@@ -67,7 +67,7 @@ const IdentitySetup = () => {
                 autoFocus
               />
             </label>
-            <small id="nickname-help">
+            <small id="nickname-help" className="settings-help">
               3–24 caratteri: lettere minuscole, numeri o underscore.
             </small>
             <Button type="submit" variant="primary">

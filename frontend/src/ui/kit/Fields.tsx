@@ -55,10 +55,12 @@ type CheckboxFieldProps = {
   onCheckedChange: (checked: boolean) => void;
   disabled?: boolean;
   id?: string;
+  descriptionId?: string;
 };
 
 export const CheckboxField = ({
   checked,
+  descriptionId,
   disabled,
   id: providedId,
   label,
@@ -76,6 +78,7 @@ export const CheckboxField = ({
         checked={checked}
         disabled={disabled}
         onCheckedChange={change}
+        aria-describedby={descriptionId}
         className="checkbox-control">
         <Checkbox.Indicator>
           <Check aria-hidden="true" size={16} />

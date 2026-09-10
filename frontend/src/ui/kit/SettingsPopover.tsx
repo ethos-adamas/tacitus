@@ -22,7 +22,9 @@ export const SettingsPopover = ({
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverPortal>
         <PopoverContent align="end">
-          <PopoverHeader>Impostazioni</PopoverHeader>
+          <PopoverHeader className="settings-heading">
+            Impostazioni
+          </PopoverHeader>
           {children}
         </PopoverContent>
       </PopoverPortal>

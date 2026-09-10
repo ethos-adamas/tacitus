@@ -47,7 +47,11 @@ export const Modal = ({
             </Button>
           </DialogClose>
         </DialogHeader>
-        {description && <DialogDescription>{description}</DialogDescription>}
+        {description && (
+          <DialogDescription className="modal-description">
+            {description}
+          </DialogDescription>
+        )}
         <div className="modal-body">{children}</div>
         {footer ?? (
           <DialogFooter>

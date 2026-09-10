@@ -48,6 +48,14 @@ _Avoid_: Payload, messaggio in chiaro
 Il testo e i dati di Relazione autenticati dalla cifratura end-to-end.
 _Avoid_: Payload
 
+**Album**:
+Un insieme di una o più foto raggruppate in un unico invio a un Contatto.
+_Avoid_: Cartella, galleria
+
+**Anteprima Album**:
+L'insieme delle foto scelte per un Album destinato a uno specifico Contatto e ancora in attesa della conferma di invio, al quale possono essere aggiunte altre foto. Rimane associato al Contatto anche quando si apre un'altra Conversazione.
+_Avoid_: Album inviato, coda di invio
+
 **Evento locale**:
 Una voce della Conversazione generata dal client, non inviata, che registra un cambiamento rilevante della Relazione.
 _Avoid_: Messaggio di sistema

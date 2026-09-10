@@ -69,8 +69,12 @@ export const ConfirmDialog = ({
             event.preventDefault();
             cancelRef.current?.focus();
           }}>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
+          <AlertDialogTitle className="alert-dialog-title">
+            {title}
+          </AlertDialogTitle>
+          <AlertDialogDescription className="alert-dialog-description">
+            {description}
+          </AlertDialogDescription>
           {error && <p role="alert">{error}</p>}
           <div className="dialog-actions">
             <AlertDialogCancel asChild>

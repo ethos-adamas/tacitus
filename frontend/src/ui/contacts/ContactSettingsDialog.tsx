@@ -45,9 +45,11 @@ const ContactSettingsDialog = ({
         <code>{tacitusId}</code>
       </div>
       <AlbumConsent tacitusId={tacitusId} />
-      <p>Le modifiche ai consensi si applicano subito.</p>
+      <p className="contact-settings-description">
+        Le modifiche ai consensi si applicano subito.
+      </p>
       {!ricezioneGlobale && (
-        <p role="status">
+        <p role="status" className="contact-settings-description">
           La ricezione di foto e album è disattivata nelle impostazioni
           generali.
         </p>
