@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -219,6 +220,38 @@ const EmojiComposer = ({
     onFiles(itemFiles.filter((file): file is File => file !== null));
   };
 
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    let active = true;
+    let frame = 0;
+    let width = textarea.clientWidth;
+    const resize = () => {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.max(48, Math.min(textarea.scrollHeight, 144))}px`;
+    };
+    const resized = () => {
+      if (textarea.clientWidth === width) return;
+      width = textarea.clientWidth;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(resize);
+    };
+    resize();
+    void document.fonts?.ready.then(() => {
+      if (active) resize();
+    });
+    const observer =
+      typeof ResizeObserver === 'undefined'
+        ? undefined
+        : new ResizeObserver(resized);
+    observer?.observe(textarea);
+    return () => {
+      active = false;
+      observer?.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, [value]);
+
   useEffect(() => {
     if (!pickerVisible && !visibleSuggestions.length) return;
     const close = (event: PointerEvent) => {
@@ -260,6 +293,16 @@ const EmojiComposer = ({
         />
       )}
       <div className="composer-attachment">{attachment}</div>
+      <Button
+        type="button"
+        variant="ghost"
+        className="emoji-toggle icon-button"
+        disabled={disabled}
+        aria-label="Choose an emoji"
+        aria-expanded={pickerVisible}
+        onClick={togglePicker}>
+        <Smile size={22} aria-hidden="true" />
+      </Button>
       <div className="message-input">
         <TextArea
           ref={textareaRef}
@@ -285,16 +328,6 @@ const EmojiComposer = ({
             {value.length}/{maxLength}
           </small>
         )}
-        <Button
-          type="button"
-          variant="ghost"
-          className="emoji-toggle"
-          disabled={disabled}
-          aria-label="Choose an emoji"
-          aria-expanded={pickerVisible}
-          onClick={togglePicker}>
-          <Smile size={22} aria-hidden="true" />
-        </Button>
       </div>
       <Button
         type="button"

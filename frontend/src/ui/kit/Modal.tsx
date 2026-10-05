@@ -54,13 +54,14 @@ export const Modal = ({
           </DialogDescription>
         )}
         <div className="modal-body">{children}</div>
-        {footer ?? (
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button>Chiudi</Button>
-            </DialogClose>
-          </DialogFooter>
-        )}
+        {footer ??
+          (size !== 'image' && (
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button>Chiudi</Button>
+              </DialogClose>
+            </DialogFooter>
+          ))}
       </DialogContent>
     </DialogPortal>
   </Dialog>

@@ -14,7 +14,7 @@ type Persona = {
 };
 
 const readTacitusId = async (page: Page) => {
-  await page.getByLabel('Impostazioni', { exact: true }).click();
+  await page.getByLabel('Impostazioni Tacitus', { exact: true }).click();
   const tacitusId = await page
     .locator('.settings-content .identity code')
     .innerText();
@@ -119,17 +119,18 @@ const waitForStableViewer = async (page: Page) => {
     .toBeGreaterThanOrEqual(3);
 };
 
-const createPng = async (page: Page, color: string, size = 32) =>
+const createPng = async (page: Page, color: string, size = 32, height = size) =>
   page.evaluate(
-    ({ color: fill, size: side }) => {
+    ({ color: fill, size: side, height }) => {
       const canvas = document.createElement('canvas');
-      canvas.width = canvas.height = side;
+      canvas.width = side;
+      canvas.height = height;
       const context = canvas.getContext('2d')!;
       context.fillStyle = fill;
-      context.fillRect(0, 0, side, side);
+      context.fillRect(0, 0, side, height);
       return canvas.toDataURL('image/png').split(',')[1];
     },
-    { color, size },
+    { color, size, height },
   );
 
 const pastePngs = async (page: Page, pngs: string[], withText = false) => {
@@ -321,7 +322,7 @@ test.describe('use case della Messaggistica privata', () => {
 
     // When
     const initialTheme = await page.locator('html').getAttribute('data-theme');
-    await page.getByLabel('Impostazioni', { exact: true }).click();
+    await page.getByLabel('Impostazioni Tacitus', { exact: true }).click();
     await page.getByLabel('Tema').selectOption('light');
 
     // Then
@@ -333,7 +334,7 @@ test.describe('use case della Messaggistica privata', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'retro');
     await page.emulateMedia({ colorScheme: 'light' });
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'retro');
-    const settings = page.getByLabel('Impostazioni', { exact: true });
+    const settings = page.getByLabel('Impostazioni Tacitus', { exact: true });
     const settingsBox = await settings.boundingBox();
     expect(settingsBox).toBeTruthy();
     await page.mouse.click(
@@ -384,7 +385,9 @@ test.describe('use case della Messaggistica privata', () => {
     await bob.page.getByRole('button', { name: /alice_notification/ }).click();
 
     // When
-    await alice.page.getByLabel('Impostazioni', { exact: true }).click();
+    await alice.page
+      .getByLabel('Impostazioni Tacitus', { exact: true })
+      .click();
     await alice.page
       .getByRole('checkbox', { name: 'Notifiche', exact: true })
       .check();
@@ -433,7 +436,9 @@ test.describe('use case della Messaggistica privata', () => {
     const alice = await createPersonaInContext(context, 'alice_denied');
 
     // When
-    await alice.page.getByLabel('Impostazioni', { exact: true }).click();
+    await alice.page
+      .getByLabel('Impostazioni Tacitus', { exact: true })
+      .click();
     const checkbox = alice.page.getByRole('checkbox', {
       name: 'Notifiche',
       exact: true,
@@ -462,7 +467,9 @@ test.describe('use case della Messaggistica privata', () => {
     const alice = await createPersonaInContext(context, 'alice_unsupported');
 
     // When
-    await alice.page.getByLabel('Impostazioni', { exact: true }).click();
+    await alice.page
+      .getByLabel('Impostazioni Tacitus', { exact: true })
+      .click();
     const checkbox = alice.page.getByRole('checkbox', {
       name: 'Notifiche',
       exact: true,
@@ -499,7 +506,9 @@ test.describe('use case della Messaggistica privata', () => {
     const alice = await createPersonaInContext(context, 'alice_error');
 
     // When
-    await alice.page.getByLabel('Impostazioni', { exact: true }).click();
+    await alice.page
+      .getByLabel('Impostazioni Tacitus', { exact: true })
+      .click();
     const checkbox = alice.page.getByRole('checkbox', {
       name: 'Notifiche',
       exact: true,
@@ -720,7 +729,7 @@ test('Regressione UI #23: font e preferenze coerenti', async ({ browser }) => {
   });
   const page = await context.newPage();
   await page.goto('/');
-  await page.getByLabel('Impostazioni', { exact: true }).click();
+  await page.getByLabel('Impostazioni Tacitus', { exact: true }).click();
   await page.getByLabel('Tema').selectOption('retro');
   await settleLayout(page);
 
@@ -748,7 +757,9 @@ test('Regressione UI #23: font e preferenze coerenti', async ({ browser }) => {
   await expect(alice.page.getByText('testo leggibile')).toBeVisible();
 
   for (const theme of ['retro', 'light', 'dark', 'retro']) {
-    await alice.page.getByLabel('Impostazioni', { exact: true }).click();
+    await alice.page
+      .getByLabel('Impostazioni Tacitus', { exact: true })
+      .click();
     await alice.page.getByLabel('Tema').selectOption(theme);
     await settleLayout(alice.page);
     const fonts = await alice.page.evaluate(() => {
@@ -816,6 +827,187 @@ test('i controlli del compositore condividono il centro verticale', async ({
   await closePersonas(alice, bob);
 });
 
+test('Regressione UI: il compositore mantiene testo, focus e spazio durante il resize', async ({
+  browser,
+}) => {
+  test.setTimeout(90_000);
+  // Given
+  const alice = await createPersona(browser, 'alice_composer');
+  const bob = await createPersona(browser, 'bob_composer');
+  await matchContacts(alice, bob);
+  await alice.page.getByRole('button', { name: /bob_composer/ }).click();
+
+  // When / Then
+  for (const theme of ['light', 'dark', 'retro']) {
+    await alice.page
+      .getByLabel('Impostazioni Tacitus', { exact: true })
+      .click();
+    await alice.page.getByLabel('Tema').selectOption(theme);
+    await alice.page.keyboard.press('Escape');
+    await settleLayout(alice.page);
+    for (const width of [850, 1024, 1280, 1536, 390, 320]) {
+      await alice.page.setViewportSize({ width, height: 800 });
+      const input = alice.page.getByLabel('Messaggio');
+      for (const value of [
+        '',
+        'Prima riga\nSeconda riga che deve rimanere leggibile dopo il ridimensionamento.',
+      ]) {
+        await input.fill(value);
+        await input.focus();
+        await settleLayout(alice.page);
+        const geometry = await input.evaluate(textarea => {
+          const composer = textarea.closest('.composer')!;
+          const wrapper = composer.closest('.conversation-composer')!;
+          return {
+            clientHeight: textarea.clientHeight,
+            scrollHeight: textarea.scrollHeight,
+            composerOutline: getComputedStyle(composer).outlineStyle,
+            overflowY: getComputedStyle(textarea).overflowY,
+            textareaOutlineStyle: getComputedStyle(textarea).outlineStyle,
+            activeElement: document.activeElement?.getAttribute('aria-label'),
+            topGap:
+              composer.getBoundingClientRect().top -
+              wrapper.getBoundingClientRect().top,
+          };
+        });
+        expect(
+          geometry.clientHeight,
+          `${theme} ${width}px: ${JSON.stringify(geometry)}`,
+        ).toBe(Math.min(144, geometry.scrollHeight));
+        expect(geometry.overflowY).toBe('auto');
+        expect(
+          geometry.composerOutline,
+          `${theme} ${width}px: ${JSON.stringify(geometry)}`,
+        ).toBe('solid');
+        expect(
+          geometry.textareaOutlineStyle,
+          `${theme} ${width}px: ${JSON.stringify(geometry)}`,
+        ).toBe('none');
+        expect(geometry.topGap).toBeGreaterThanOrEqual(12);
+      }
+    }
+  }
+  await closePersonas(alice, bob);
+});
+
+test('Regressione UI: Contatti riducibili, impostazioni distinte e timestamp per catena', async ({
+  browser,
+}) => {
+  // Given
+  const alice = await createPersona(browser, 'alice_catene');
+  const bob = await createPersona(browser, 'bob_catene');
+  await matchContacts(alice, bob);
+  await alice.page.getByRole('button', { name: /bob_catene/ }).click();
+  await bob.page.getByRole('button', { name: /alice_catene/ }).click();
+
+  // When / Then: a timestamp belongs only to the last message of each chain.
+  for (const [sender, text] of [
+    [alice, 'Prima parte'],
+    [alice, 'Seconda parte'],
+    [bob, 'Prima risposta'],
+    [bob, 'Seconda risposta'],
+    [alice, 'Ultima parte'],
+  ] as const) {
+    await sender.page.getByLabel('Messaggio').fill(text);
+    await sender.page
+      .getByRole('button', { name: 'Invia', exact: true })
+      .click();
+    await expect(alice.page.getByText(text, { exact: true })).toBeVisible();
+  }
+  await expect(alice.page.locator('.messages time')).toHaveCount(3);
+  await expect(
+    alice.page.locator('.message', { hasText: 'Prima parte' }).locator('time'),
+  ).toHaveCount(0);
+  await expect(
+    alice.page
+      .locator('.message', { hasText: 'Prima risposta' })
+      .locator('time'),
+  ).toHaveCount(0);
+  for (const text of ['Seconda parte', 'Seconda risposta', 'Ultima parte']) {
+    await expect(
+      alice.page.locator('.message', { hasText: text }).locator('time'),
+    ).toHaveCount(1);
+  }
+
+  // When / Then: reducing navigation preserves the selected chat and its draft.
+  await alice.page.setViewportSize({ width: 1280, height: 800 });
+  await alice.page.getByLabel('Messaggio').fill('Bozza da conservare');
+  await expect(
+    alice.page.getByLabel('Impostazioni Tacitus', { exact: true }),
+  ).toHaveAttribute('title', 'Impostazioni Tacitus');
+  await expect(
+    alice.page.getByLabel('Impostazioni del Contatto', { exact: true }),
+  ).toHaveAttribute('title', 'Opzioni di bob_catene');
+  for (const theme of ['light', 'dark', 'retro']) {
+    await alice.page
+      .getByLabel('Impostazioni Tacitus', { exact: true })
+      .click();
+    await alice.page.getByLabel('Tema').selectOption(theme);
+    await alice.page.keyboard.press('Escape');
+    await alice.page
+      .getByRole('button', { name: 'Riduci Contatti', exact: true })
+      .click();
+    await expect(
+      alice.page.getByRole('button', { name: 'Espandi Contatti', exact: true }),
+    ).toHaveAttribute('aria-expanded', 'false');
+    await expect(alice.page.getByLabel('Messaggio')).toHaveValue(
+      'Bozza da conservare',
+    );
+    const sidebar = await alice.page
+      .getByRole('complementary', { name: 'Conversazioni' })
+      .boundingBox();
+    expect(sidebar!.width).toBe(88);
+    await expect(
+      alice.page.getByRole('button', { name: /bob_catene/ }),
+    ).toBeVisible();
+    await alice.page
+      .getByRole('button', { name: 'Espandi Contatti', exact: true })
+      .click();
+  }
+  await alice.page
+    .getByRole('button', { name: 'Riduci Contatti', exact: true })
+    .click();
+  await alice.page.setViewportSize({ width: 390, height: 740 });
+  await expect(
+    alice.page.getByRole('button', { name: 'Espandi Contatti', exact: true }),
+  ).not.toBeVisible();
+  await alice.page
+    .getByRole('button', { name: 'Torna alle Conversazioni' })
+    .click();
+  await expect(
+    alice.page.getByRole('button', { name: /bob_catene/ }),
+  ).toBeVisible();
+  await alice.page.setViewportSize({ width: 1280, height: 800 });
+  await alice.page
+    .getByRole('button', { name: 'Espandi Contatti', exact: true })
+    .click();
+  const sidebar = await alice.page
+    .getByRole('complementary', { name: 'Conversazioni' })
+    .boundingBox();
+  expect(sidebar!.width).toBeGreaterThanOrEqual(280);
+
+  // Then: the reduced rail keeps the unblock action within its bounds in rétro.
+  await alice.page.getByRole('button', { name: /bob_catene/ }).click();
+  await alice.page
+    .getByLabel('Impostazioni del Contatto', { exact: true })
+    .click();
+  await alice.page.getByRole('button', { name: 'Blocca Contatto' }).click();
+  await alice.page
+    .getByRole('button', { name: 'Blocca definitivamente' })
+    .click();
+  await alice.page.getByRole('button', { name: 'Riduci Contatti' }).click();
+  const unblock = alice.page.getByRole('button', {
+    name: 'Sblocca',
+    exact: true,
+  });
+  await expect(unblock).toBeVisible();
+  const unblockRect = await unblock.boundingBox();
+  expect(unblockRect!.width).toBe(44);
+  await unblock.click();
+  await expect(unblock).toHaveCount(0);
+  await closePersonas(alice, bob);
+});
+
 test('il selettore emoji mantiene griglia e ricerca con la policy di produzione', async ({
   browser,
 }) => {
@@ -861,7 +1053,7 @@ test('le impostazioni sono raccolte sotto l’ingranaggio', async ({
   await expect(
     alice.page.getByRole('button', { name: 'Cancella dati' }),
   ).not.toBeVisible();
-  await alice.page.getByLabel('Impostazioni', { exact: true }).click();
+  await alice.page.getByLabel('Impostazioni Tacitus', { exact: true }).click();
   await expect(
     alice.page.getByRole('button', { name: 'Cancella dati' }),
   ).toBeVisible();
@@ -1133,9 +1325,9 @@ test('Album: consenso iniziale, accettazione successiva, persistenza e revoca', 
     .click();
   await bob.page.getByLabel('Foto da questo Contatto').selectOption('allow');
   await bob.page.getByRole('button', { name: 'Chiudi' }).last().click();
-  await bob.page.getByLabel('Impostazioni', { exact: true }).click();
+  await bob.page.getByLabel('Impostazioni Tacitus', { exact: true }).click();
   await bob.page.getByText('Ricevi foto e album', { exact: true }).click();
-  await bob.page.getByLabel('Impostazioni', { exact: true }).click();
+  await bob.page.getByLabel('Impostazioni Tacitus', { exact: true }).click();
   await alice.page.getByLabel('Scegli foto').setInputFiles(files.slice(0, 1));
   await alice.page.getByRole('button', { name: 'Invia album' }).click();
   await expect(
@@ -1194,7 +1386,7 @@ test('Regressione UI #19: tastiera zoom — Album: anteprima e download esplicit
   await bob.page.getByLabel('Foto da questo Contatto').selectOption('allow');
   await bob.page.getByRole('button', { name: 'Chiudi' }).last().click();
   await alice.page.getByRole('button', { name: /bob_viewer/ }).click();
-  const png = await createPng(alice.page, '#2f8f67', 1200);
+  const png = await createPng(alice.page, '#2f8f67', 1200, 600);
   await alice.page.getByLabel('Scegli foto').setInputFiles({
     name: 'foto-viewer.png',
     mimeType: 'image/png',
@@ -1313,6 +1505,56 @@ test('Regressione UI #19: tastiera zoom — Album: anteprima e download esplicit
   await expect(
     alice.page.getByRole('button', { name: 'Apri Foto 1' }),
   ).toBeFocused();
+  // When / Then: landscape images stay centered and controls fit every theme.
+  for (const theme of ['light', 'dark', 'retro']) {
+    await alice.page
+      .getByLabel('Impostazioni Tacitus', { exact: true })
+      .click();
+    await alice.page.getByLabel('Tema').selectOption(theme);
+    await alice.page.keyboard.press('Escape');
+    await settleLayout(alice.page);
+    for (const width of [1280, 390, 320]) {
+      await alice.page.setViewportSize({ width, height: 844 });
+      await alice.page.getByRole('button', { name: 'Apri Foto 1' }).click();
+      await waitForStableViewer(alice.page);
+      const geometry = await alice.page
+        .locator('.photo-viewer-stage')
+        .evaluate(stage => {
+          const rect = stage.getBoundingClientRect();
+          const image = stage
+            .querySelector('.photo-viewer-image')!
+            .getBoundingClientRect();
+          const dialog = stage.closest('[role="dialog"]')!;
+          return {
+            xOffset: Math.abs(
+              image.x + image.width / 2 - rect.x - rect.width / 2,
+            ),
+            yOffset: Math.abs(
+              image.y + image.height / 2 - rect.y - rect.height / 2,
+            ),
+            inside:
+              image.width <= rect.width + 1 && image.height <= rect.height + 1,
+            overflow:
+              dialog.scrollWidth > dialog.clientWidth ||
+              dialog.scrollHeight > dialog.clientHeight,
+          };
+        });
+      expect(
+        geometry.xOffset,
+        `${theme} ${width}px: ${JSON.stringify(geometry)}`,
+      ).toBeLessThanOrEqual(1);
+      expect(
+        geometry.yOffset,
+        `${theme} ${width}px: ${JSON.stringify(geometry)}`,
+      ).toBeLessThanOrEqual(1);
+      expect(geometry.inside).toBe(true);
+      expect(geometry.overflow).toBe(false);
+      await expect(
+        alice.page.getByRole('button', { name: 'Chiudi', exact: true }),
+      ).toHaveCount(1);
+      await alice.page.keyboard.press('Escape');
+    }
+  }
   await closePersonas(alice, bob);
 });
 

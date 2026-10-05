@@ -139,7 +139,7 @@ it('collega un aiuto tastiera visibile con un ID distinto per ogni viewer', asyn
     expect(screen.getAllByLabelText('Foto ingrandita')).toHaveLength(2),
   );
   const helpIds = screen
-    .getAllByText('+/− ingrandisci, frecce spostano, 0 ripristina.')
+    .getAllByText(/Rotellina o due dita per lo zoom/)
     .map(element => element.id);
   expect(new Set(helpIds).size).toBe(2);
   for (const wrapper of screen.getAllByLabelText('Foto ingrandita'))

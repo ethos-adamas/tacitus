@@ -15,9 +15,13 @@ import ContactSettingsDialog from '../contacts/ContactSettingsDialog';
 import { Button } from '../kit/Button';
 import MessageComposer from './MessageComposer';
 
-type MessageProps = { message: Messaggio; tacitusId: TacitusId };
+type MessageProps = {
+  message: Messaggio;
+  tacitusId: TacitusId;
+  showTimestamp: boolean;
+};
 
-const Message = ({ message, tacitusId }: MessageProps) => (
+const Message = ({ message, tacitusId, showTimestamp }: MessageProps) => (
   <article
     className={`message ${message.direzione === 'ricevuto' ? 'incoming' : 'outgoing'}`}>
     {message.album ? (
@@ -29,13 +33,15 @@ const Message = ({ message, tacitusId }: MessageProps) => (
     ) : (
       <p>{message.testo}</p>
     )}
-    <time dateTime={new Date(message.creatoIl).toISOString()}>
-      {new Date(message.creatoIl).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      })}
-    </time>
+    {showTimestamp && (
+      <time dateTime={new Date(message.creatoIl).toISOString()}>
+        {new Date(message.creatoIl).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        })}
+      </time>
+    )}
   </article>
 );
 
@@ -113,11 +119,14 @@ const ConversationContent = ({
         {conversation.messaggi.length === 0 && (
           <p className="empty">La Conversazione è vuota.</p>
         )}
-        {conversation.messaggi.map(message => (
+        {conversation.messaggi.map((message, index) => (
           <Message
             key={message.id}
             message={message}
             tacitusId={contact.tacitusId}
+            showTimestamp={
+              conversation.messaggi[index + 1]?.direzione !== message.direzione
+            }
           />
         ))}
         <div ref={messagesEnd} />

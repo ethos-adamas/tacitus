@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings } from 'lucide-react';
+import { Ellipsis } from 'lucide-react';
 import { useRelazioni } from '../../application/hooks/useRelazioni';
 import { useSelector } from '../../application/store/hooks';
 import type { TacitusId } from '../../domain/tacitusId';
@@ -36,8 +36,9 @@ const ContactSettingsDialog = ({
           type="button"
           variant="ghost"
           className="contact-settings-trigger icon-button"
-          aria-label="Impostazioni del Contatto">
-          <Settings size={22} aria-hidden="true" />
+          aria-label="Impostazioni del Contatto"
+          title={`Opzioni di ${nickname}`}>
+          <Ellipsis size={22} aria-hidden="true" />
         </Button>
       }
       title="Impostazioni del Contatto">

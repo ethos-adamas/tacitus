@@ -47,7 +47,9 @@ const renderHeader = (
       <AppHeader />
     </Provider>,
   );
-  fireEvent.click(screen.getByLabelText('Impostazioni', { exact: true }));
+  fireEvent.click(
+    screen.getByLabelText('Impostazioni Tacitus', { exact: true }),
+  );
   return store;
 };
 
@@ -77,7 +79,9 @@ it('mantiene il brand visibile e raccoglie ID, organizzazione e versione nelle i
   expect(screen.queryByText(`Tacitus v${version} · ethos-adamas`)).toBeNull();
 
   // When
-  fireEvent.click(screen.getByLabelText('Impostazioni', { exact: true }));
+  fireEvent.click(
+    screen.getByLabelText('Impostazioni Tacitus', { exact: true }),
+  );
 
   // Then
   expect(screen.getByText(tacitusId)).toBeDefined();

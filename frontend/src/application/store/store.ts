@@ -12,6 +12,7 @@ import { conversazioniReducer } from './conversazioniSlice';
 import { feedbackReducer } from './feedbackSlice';
 import { identitaLocaleReducer } from './identitaLocaleSlice';
 import { notificheReducer } from './notificheSlice';
+import { navigazioneReducer } from './navigazioneSlice';
 import { presenzeContattiReducer } from './presenzeContattiSlice';
 import { relazioniReducer } from './relazioniSlice';
 import { sessioniSicureReducer } from './sessioniSicureSlice';
@@ -25,6 +26,7 @@ const reducers = {
   feedback: feedbackReducer,
   identitaLocale: identitaLocaleReducer,
   notifiche: notificheReducer,
+  navigazione: navigazioneReducer,
   presenzeContatti: presenzeContattiReducer,
   relazioni: relazioniReducer,
   sessioniSicure: sessioniSicureReducer,

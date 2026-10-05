@@ -11,6 +11,9 @@ const AuthenticatedApplication = () => {
   const conversationOpen = useSelector(
     state => state.conversazioni.idConversazioneAttiva !== undefined,
   );
+  const contactsCollapsed = useSelector(
+    state => state.navigazione.contattiRidotti,
+  );
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -39,7 +42,7 @@ const AuthenticatedApplication = () => {
 
   return (
     <main
-      className={`app-shell ${conversationOpen ? 'conversation-open' : ''}`}>
+      className={`app-shell ${conversationOpen ? 'conversation-open' : ''} ${contactsCollapsed ? 'sidebar-collapsed' : ''}`}>
       <AppHeader />
       <Feedback />
       <section

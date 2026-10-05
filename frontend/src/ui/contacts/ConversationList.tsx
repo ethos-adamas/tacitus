@@ -1,8 +1,17 @@
 import { useState } from 'react';
-import { Plus, ShieldBan, UserRound, X } from 'lucide-react';
+import {
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  ShieldBan,
+  ShieldCheck,
+  UserRound,
+  X,
+} from 'lucide-react';
 import { useElencoConversazioni } from '../../application/hooks/useElencoConversazioni';
 import { useRelazioni } from '../../application/hooks/useRelazioni';
-import { useSelector } from '../../application/store/hooks';
+import { useDispatch, useSelector } from '../../application/store/hooks';
+import { pannelloContattiAlternato } from '../../application/store/navigazioneSlice';
 import {
   selectIdentitaBloccate,
   type VoceElencoConversazioni,
@@ -72,6 +81,8 @@ const ConversationRow = ({
       variant="ghost"
       className={`!grid contact ${stato} ${attiva ? 'selected' : ''}`}
       aria-current={attiva ? 'true' : undefined}
+      aria-label={`${nickname}, ${statusLabel[stato]}${fotoInAttesa ? ', Foto da accettare' : ''}${nonLetti > 0 ? `, ${nonLetti} non letti` : ''}`}
+      title={`${nickname} · ${statusLabel[stato]}`}
       onClick={select}>
       <span className="avatar" aria-hidden="true">
         {nickname[0].toUpperCase()}
@@ -100,24 +111,49 @@ const BlockedRow = ({ tacitusId }: BlockedRowProps) => {
         <strong>Identità bloccata</strong>
         <code>{tacitusId}</code>
       </span>
-      <Button type="button" onClick={unblock} aria-label="Sblocca">
-        Sblocca
+      <Button
+        type="button"
+        onClick={unblock}
+        aria-label="Sblocca"
+        title="Sblocca">
+        <ShieldCheck className="unblock-icon" size={22} aria-hidden="true" />
+        <span>Sblocca</span>
       </Button>
     </div>
   );
 };
 
 const ConversationList = () => {
+  const dispatch = useDispatch();
+  const collapsed = useSelector(state => state.navigazione.contattiRidotti);
   const [dialogOpen, setDialogOpen] = useState(false);
   const { seleziona, voci } = useElencoConversazioni();
   const blocchi = useSelector(selectIdentitaBloccate);
   const openDialog = () => setDialogOpen(true);
   const closeDialog = () => setDialogOpen(false);
+  const toggleContacts = () => dispatch(pannelloContattiAlternato());
 
   return (
-    <aside className="conversation-list" aria-label="Conversazioni">
+    <aside
+      id="conversation-list"
+      className="conversation-list"
+      aria-label="Conversazioni">
       <div className="panel-title">
         <h1>Conversazioni</h1>
+        <Button
+          variant="ghost"
+          className="sidebar-toggle icon-button"
+          onClick={toggleContacts}
+          aria-controls="conversation-list"
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? 'Espandi Contatti' : 'Riduci Contatti'}
+          title={collapsed ? 'Espandi Contatti' : 'Riduci Contatti'}>
+          {collapsed ? (
+            <PanelLeftOpen size={22} aria-hidden="true" />
+          ) : (
+            <PanelLeftClose size={22} aria-hidden="true" />
+          )}
+        </Button>
         <AddContactDialog
           open={dialogOpen}
           onClose={closeDialog}

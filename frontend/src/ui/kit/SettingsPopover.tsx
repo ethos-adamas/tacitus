@@ -27,7 +27,7 @@ export const SettingsPopover = ({
           sideOffset={8}
           collisionPadding={16}>
           <PopoverHeader className="settings-heading">
-            Impostazioni
+            Impostazioni Tacitus
           </PopoverHeader>
           {children}
         </PopoverContent>

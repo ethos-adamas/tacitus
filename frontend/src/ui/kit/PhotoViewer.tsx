@@ -1,4 +1,5 @@
 import { useEffect, useId, useState, type SyntheticEvent } from 'react';
+import { Download, Minus, Plus, RotateCcw } from 'lucide-react';
 import {
   TransformComponent,
   TransformWrapper,
@@ -187,6 +188,7 @@ const PhotoViewer = ({ alt, downloadName, src }: PhotoViewerProps) => {
               <TransformComponent
                 wrapperClass="photo-viewer-zoom-area"
                 contentClass="photo-viewer-zoom-content"
+                contentStyle={{ width: natural.width, height: natural.height }}
                 wrapperProps={{
                   tabIndex: 0,
                   'aria-label': 'Foto ingrandita',
@@ -207,14 +209,17 @@ const PhotoViewer = ({ alt, downloadName, src }: PhotoViewerProps) => {
         </div>
         <div className="photo-viewer-toolbar" aria-label="Controlli foto">
           <small id={keyboardHelpId} className="photo-viewer-keyboard-help">
-            +/− ingrandisci, frecce spostano, 0 ripristina.
+            Rotellina o due dita per lo zoom. +/− ingrandisci, frecce spostano,
+            0 ripristina.
           </small>
           <Button
             type="button"
             onClick={zoomOut}
             disabled={zoomOutDisabled}
+            variant="ghost"
+            className="icon-button"
             aria-label="Riduci zoom">
-            −
+            <Minus size={20} aria-hidden="true" />
           </Button>
           <output aria-label="Zoom foto">
             {minScale ? Math.round((displayedScale / minScale) * 100) : 100}%
@@ -223,14 +228,27 @@ const PhotoViewer = ({ alt, downloadName, src }: PhotoViewerProps) => {
             type="button"
             onClick={zoomIn}
             disabled={zoomInDisabled}
+            variant="ghost"
+            className="icon-button"
             aria-label="Aumenta zoom">
-            +
+            <Plus size={20} aria-hidden="true" />
           </Button>
-          <Button type="button" onClick={reset} aria-label="Ripristina zoom">
-            100%
+          <Button
+            type="button"
+            onClick={reset}
+            variant="ghost"
+            className="icon-button"
+            title="Ripristina zoom"
+            aria-label="Ripristina zoom">
+            <RotateCcw size={20} aria-hidden="true" />
           </Button>
-          <DownloadLink href={src} download={downloadName}>
-            Scarica foto
+          <DownloadLink
+            href={src}
+            download={downloadName}
+            aria-label="Scarica foto"
+            title="Scarica foto">
+            <Download size={20} aria-hidden="true" />
+            <span>Scarica foto</span>
           </DownloadLink>
         </div>
       </div>

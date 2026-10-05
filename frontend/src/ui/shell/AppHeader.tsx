@@ -87,8 +87,8 @@ const AppHeader = () => {
             <Button
               variant="ghost"
               className="icon-button"
-              aria-label="Impostazioni"
-              title="Impostazioni">
+              aria-label="Impostazioni Tacitus"
+              title="Impostazioni Tacitus">
               <Settings size={22} aria-hidden="true" />
             </Button>
           }>

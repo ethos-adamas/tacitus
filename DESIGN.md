@@ -177,6 +177,12 @@ components:
     width: "54px"
     height: "54px"
     padding: "0"
+  composer-group:
+    rounded: "{rounded.surface}"
+    padding: "10px 12px 10px 16px"
+  photo-viewer-toolbar:
+    rounded: "{rounded.surface}"
+    padding: "8px"
 ---
 # Design System: Tacitus
 
@@ -244,7 +250,7 @@ A restrained green accent sits among theme-specific neutral surfaces. The frontm
 
 ## Layout
 
-The desktop shell sits (24px) from the viewport edges. A two-column grid gives navigation a minimum (280px), normally (25%) of the width, beside a flexible conversation. The panel gap is (8px). Navigation's brand, list, and local identity occupy rows of (98px), flexible height, and (104px); the conversation spans all three.
+The desktop shell sits (24px) from the viewport edges. A two-column grid gives navigation a minimum (280px), normally (25%) of the width, beside a flexible conversation. The panel gap is (8px). Expanded navigation uses rows of (98px), flexible height, and (104px); the conversation spans all three. Above (720px), navigation can collapse to an (88px) avatar rail with rows of (98px), flexible height, and (128px). Its toggle exposes expanded state and controls the contact list; contact names and states remain available to assistive technology and through descriptive titles.
 
 At (720px) and below, the shell becomes edge-to-edge. The list and the open conversation alternate in one column, with a visible back control. The brand row is (64px), the open conversation heading (76px), and the closed-list identity row (88px). Active conversation content replaces the list and local identity footer.
 
@@ -284,7 +290,7 @@ Fields use the theme field surface, divider border, shared radius, and (8px 12px
 
 ### Navigation
 
-Contact rows are broad, quiet buttons: minimum (84px), (14px 16px) padding, a (56px) avatar, and (16px) spacing. Selected rows use pale green. Names, explicit session state, unread badges, and pending-photo labels share a predictable hierarchy. A status dot supplements text; it never replaces it. Mobile displays one conversation at a time.
+Contact rows are broad, quiet buttons: minimum (84px), (14px 16px) padding, a (56px) avatar, and (16px) spacing. Selected rows use pale green. Names, explicit session state, unread badges, and pending-photo labels share a predictable hierarchy. A status dot supplements text; it never replaces it. The desktop avatar rail retains accessible contact labels, state, pending-photo information, unread count, and hover titles while hiding the visible copy. Its selected state and unread badge stay visible. Blocked identities use a (44px) Lucide ShieldCheck action in the rail, labeled “Sblocca”; expanded navigation keeps the text label. The collapse toggle is desktop-only; mobile displays one conversation at a time.
 
 ### Badges
 
@@ -292,15 +298,21 @@ Unread counts use a round (24px) badge with primary fill and paired contrast tex
 
 ### Cards / Containers
 
-Identity creation uses a translucent control surface without a cast shadow. Settings use the same material with (24px) padding and a shared overlay shadow, at most (360px) wide. Dialogs use the opaque surface, matching corners, explicit titles and descriptions, and grouped actions. Theme, ID, version, and ethos-adamas belong in settings, including before identity creation. The persistent local identity footer shows nickname, relay state, and copy action.
+Identity creation uses a translucent control surface without a cast shadow. Settings use the same material with (24px) padding and a shared overlay shadow, at most (360px) wide. Dialogs use the opaque surface, matching corners, explicit titles and descriptions, and grouped actions. Theme, ID, version, and ethos-adamas belong in settings, including before identity creation. The persistent local identity footer shows nickname, relay state, and copy action. Global settings use the Lucide gear with the label and title “Impostazioni Tacitus”. Contact settings use Lucide Ellipsis, the title “Opzioni di [nickname]”, and the accessible label “Impostazioni del Contatto”. These distinct marks separate application preferences from contact actions.
 
 ### Conversation and composer
 
-Incoming messages align left and outgoing messages right. Bubble tones distinguish direction without adding ornament; timestamp placement follows the same alignment. Content wraps and preserves message line breaks. The composer groups photos, emoji, text, and send into one outlined glass control. Desktop has an (80px) minimum height and a small separator after the emoji area; mobile lowers it to (68px) and hides the separator. The filled send mark sits in a (54px) circle desktop and a (44px) target mobile; rétro changes that shape to square.
+Incoming messages align left and outgoing messages right. Bubble tones distinguish direction without adding ornament. Show one timestamp only on the last message in each consecutive run of the same direction, including albums; its alignment follows that direction. Content wraps and preserves message line breaks.
+
+The composer groups photos, emoji, text, and send into one outlined glass control. Focus anywhere inside the group highlights its entire perimeter with the theme focus color (2px outline, 2px offset); the textarea has no separate focus outline. Text automatically grows from (48px) to (144px), then scrolls internally rather than resizing manually. Desktop has an (80px) minimum group height, (16px) space above it, and a small divider before the text area. Mobile lowers the group minimum to (68px), uses (12px) space above it, and removes that divider. Photo and emoji controls are adjacent siblings of the textarea within the same focus group. The filled send mark sits in a (54px) circle desktop and a (44px) target mobile; rétro changes that shape to square.
 
 ### Photos, emoji, and feedback
 
-Photo previews reuse shared controls and corners: (96px) square thumbnails, compact gaps, explicit consent and transfer status, and a two-column conversation gallery. The large photo dialog fits the viewport and uses the shared toolbar treatment. Emoji panels use an opaque surface and the overlay shadow; selection uses pale green. Error and success feedback uses compact, centered toasts with explicit text and a shared overlay shadow. Error dismissal retains an accessible icon target.
+Photo previews reuse shared controls and corners: (96px) square thumbnails, compact gaps, explicit consent and transfer status, and a two-column conversation gallery. The photo viewer retains the shared theme surface, corners, and control vocabulary. Its dialog has (24px) viewport margins desktop, a maximum width of (1280px), and (16px) inner padding; mobile uses (8px) margins and padding. The header provides the only close action, beside the accessible photo title. The photo starts centered and fitted without enlarging beyond its natural dimensions; zoom bounds use the photo’s natural width and height, with the fitted view shown as (100%) and zoom capped at four times that fit.
+
+A compact glass toolbar has (8px) padding and (4px) gaps: Lucide minus/plus zoom actions, percentage, reset, and download. Controls retain (44px) minimum targets. Mobile download shows just its labeled icon in a (44px) control. A single visible help line explains pointer, touch, and keyboard zoom; the modal description remains available to assistive technology. The viewport and toolbar inherit all three themes, and reduced transparency makes the toolbar solid and removes its blur. Zoom and pan do not animate.
+
+Emoji panels use an opaque surface and the overlay shadow; selection uses pale green. Error and success feedback uses compact, centered toasts with explicit text and a shared overlay shadow. Error dismissal retains an accessible icon target.
 
 ## Do's and Don'ts
 
@@ -310,6 +322,8 @@ Photo previews reuse shared controls and corners: (96px) square thumbnails, comp
 - **Do** use semantic theme variables so light, dark, and rétro preserve their distinct palettes.
 - **Do** keep message content and the reading plane legible above transparency effects.
 - **Do** preserve 44px minimum control targets and the visible focus treatment.
+- **Do** highlight the entire composer when any of its controls has focus.
+- **Do** preserve accessible contact names and states when navigation becomes an avatar rail.
 - **Do** respect reduced motion, reduced transparency, safe areas, and the visual viewport when the mobile keyboard opens.
 - **Do** keep consent, offline states, errors, and destructive actions explicit in text.
 
