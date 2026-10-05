@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Plus, ShieldBan, UserRound, X } from 'lucide-react';
 import { useElencoConversazioni } from '../../application/hooks/useElencoConversazioni';
 import { useRelazioni } from '../../application/hooks/useRelazioni';
 import { useSelector } from '../../application/store/hooks';
@@ -28,7 +29,9 @@ const IntentRow = ({ tacitusId }: IntentRowProps) => {
   const cancel = () => annullaIntento(tacitusId);
   return (
     <div className="contact">
-      <span className="avatar">?</span>
+      <span className="avatar" aria-hidden="true">
+        <UserRound size={22} />
+      </span>
       <span>
         <strong>Intento di contatto</strong>
         <small>In attesa del Contatto</small>
@@ -37,9 +40,10 @@ const IntentRow = ({ tacitusId }: IntentRowProps) => {
       <Button
         type="button"
         variant="ghost"
+        className="icon-button"
         onClick={cancel}
         aria-label="Annulla Intento">
-        ×
+        <X size={20} aria-hidden="true" />
       </Button>
     </div>
   );
@@ -66,12 +70,15 @@ const ConversationRow = ({
     <Button
       type="button"
       variant="ghost"
-      className={`!grid contact ${attiva ? 'selected' : ''}`}
+      className={`!grid contact ${stato} ${attiva ? 'selected' : ''}`}
+      aria-current={attiva ? 'true' : undefined}
       onClick={select}>
-      <span className="avatar">{nickname[0].toUpperCase()}</span>
+      <span className="avatar" aria-hidden="true">
+        {nickname[0].toUpperCase()}
+      </span>
       <span>
         <strong>{nickname}</strong>
-        <small>{statusLabel[stato]}</small>
+        <small className={`contact-state ${stato}`}>{statusLabel[stato]}</small>
         {fotoInAttesa && <small>Foto da accettare</small>}
       </span>
       {nonLetti > 0 && <b className="unread">{nonLetti}</b>}
@@ -86,7 +93,9 @@ const BlockedRow = ({ tacitusId }: BlockedRowProps) => {
   const unblock = () => sbloccaContatto(tacitusId);
   return (
     <div className="contact blocked-contact">
-      <span className="avatar">×</span>
+      <span className="avatar" aria-hidden="true">
+        <ShieldBan size={22} />
+      </span>
       <span>
         <strong>Identità bloccata</strong>
         <code>{tacitusId}</code>
@@ -106,15 +115,20 @@ const ConversationList = () => {
   const closeDialog = () => setDialogOpen(false);
 
   return (
-    <aside>
+    <aside className="conversation-list" aria-label="Conversazioni">
       <div className="panel-title">
         <h1>Conversazioni</h1>
         <AddContactDialog
           open={dialogOpen}
           onClose={closeDialog}
           trigger={
-            <Button className="add" onClick={openDialog}>
-              +
+            <Button
+              className="add icon-button"
+              variant="ghost"
+              onClick={openDialog}
+              aria-label="Aggiungi Contatto"
+              title="Aggiungi Contatto">
+              <Plus size={24} aria-hidden="true" />
             </Button>
           }
         />

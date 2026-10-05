@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { ImagePlus, X } from 'lucide-react';
 import type { TacitusId } from '../../domain/tacitusId';
 import {
   annullaAlbum,
@@ -92,8 +93,15 @@ export const PhotoPicker = ({ disabled, onFiles }: PhotoPickerProps) => {
   };
   return (
     <>
-      <Button type="button" disabled={disabled} onClick={openPicker}>
-        Aggiungi foto
+      <Button
+        type="button"
+        variant="ghost"
+        className="icon-button"
+        disabled={disabled}
+        onClick={openPicker}
+        aria-label="Aggiungi foto"
+        title="Aggiungi foto">
+        <ImagePlus size={22} aria-hidden="true" />
       </Button>
       <input
         ref={inputRef}
@@ -144,7 +152,7 @@ const PhotoThumbnail = ({
         disabled={disabled}
         aria-label={`Rimuovi foto ${index + 1}`}
         onClick={remove}>
-        ×
+        <X size={18} aria-hidden="true" />
       </Button>
     </figure>
   );

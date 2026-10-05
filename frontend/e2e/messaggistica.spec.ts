@@ -13,6 +13,15 @@ type Persona = {
   tacitusId: string;
 };
 
+const readTacitusId = async (page: Page) => {
+  await page.getByLabel('Impostazioni', { exact: true }).click();
+  const tacitusId = await page
+    .locator('.settings-content .identity code')
+    .innerText();
+  await page.keyboard.press('Escape');
+  return tacitusId;
+};
+
 declare global {
   interface Window {
     __tacitusNotificationPermissionRequests: number;
@@ -31,7 +40,7 @@ const createPersonaInContext = async (
   await expect(page.locator('.connection')).toHaveText('online', {
     timeout: 15_000,
   });
-  const tacitusId = await page.locator('header .identity code').innerText();
+  const tacitusId = await readTacitusId(page);
   return { context, page, tacitusId };
 };
 
@@ -53,7 +62,9 @@ const createPersona = async (
 
 const addContact = async (page: Page, tacitusId: string) => {
   await page.locator('.panel-title .add').click();
-  await page.getByLabel('Tacitus ID').fill(tacitusId);
+  await page
+    .getByRole('textbox', { name: 'Tacitus ID', exact: true })
+    .fill(tacitusId);
   await page.getByRole('button', { name: 'Aggiungi', exact: true }).click();
 };
 
@@ -727,7 +738,7 @@ test('Regressione UI #23: font e preferenze coerenti', async ({ browser }) => {
   const alice: Persona = {
     context,
     page,
-    tacitusId: await page.locator('header .identity code').innerText(),
+    tacitusId: await readTacitusId(page),
   };
   const bob = await createPersona(browser, 'bob_ui23');
   await matchContacts(alice, bob);

@@ -56,7 +56,7 @@ afterEach(() => {
   saveNotificationsEnabled.mockReset();
 });
 
-it('mostra brand, organizzazione e versione della build insieme', () => {
+it('mantiene il brand visibile e raccoglie ID, organizzazione e versione nelle impostazioni', () => {
   // Given
   const store = createTestStore();
   store.dispatch(
@@ -73,8 +73,15 @@ it('mostra brand, organizzazione e versione della build insieme', () => {
   );
   // Then
   expect(screen.getByText('TACITUS')).toBeDefined();
-  expect(screen.getByText('ethos-adamas')).toBeDefined();
-  expect(screen.getByText(`v${version}`)).toBeDefined();
+  expect(screen.queryByText(tacitusId)).toBeNull();
+  expect(screen.queryByText(`Tacitus v${version} · ethos-adamas`)).toBeNull();
+
+  // When
+  fireEvent.click(screen.getByLabelText('Impostazioni', { exact: true }));
+
+  // Then
+  expect(screen.getByText(tacitusId)).toBeDefined();
+  expect(screen.getByText(`Tacitus v${version} · ethos-adamas`)).toBeDefined();
 });
 
 it('mostra due checkbox con aiuto senza chiedere permessi all’apertura', () => {

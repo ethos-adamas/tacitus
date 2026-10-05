@@ -38,7 +38,8 @@ const AuthenticatedApplication = () => {
   }, []);
 
   return (
-    <main className="app-shell">
+    <main
+      className={`app-shell ${conversationOpen ? 'conversation-open' : ''}`}>
       <AppHeader />
       <Feedback />
       <section

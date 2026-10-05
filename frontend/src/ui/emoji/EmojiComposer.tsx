@@ -17,6 +17,7 @@ import {
   type ShortcodeToken,
 } from './emoji';
 import type { Tema } from '../../domain/preferenze';
+import { Smile } from 'lucide-react';
 import { Button } from '../kit/Button';
 import { TextArea } from '../kit/Fields';
 import EmojiPicker from '../kit/EmojiPicker';
@@ -279,9 +280,11 @@ const EmojiComposer = ({
           onKeyDown={onKeyDown}
           onPaste={pasteFiles}
         />
-        <small>
-          {value.length}/{maxLength}
-        </small>
+        {value.length >= maxLength * 0.9 && (
+          <small>
+            {value.length}/{maxLength}
+          </small>
+        )}
         <Button
           type="button"
           variant="ghost"
@@ -290,7 +293,7 @@ const EmojiComposer = ({
           aria-label="Choose an emoji"
           aria-expanded={pickerVisible}
           onClick={togglePicker}>
-          ☺
+          <Smile size={22} aria-hidden="true" />
         </Button>
       </div>
       <Button
@@ -300,7 +303,9 @@ const EmojiComposer = ({
         aria-label="Invia"
         disabled={disabled || !value.trim()}
         onClick={onSend}>
-        ↑
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M3 3 22 12 3 21v-7h10v-4H3Z" />
+        </svg>
       </Button>
     </div>
   );

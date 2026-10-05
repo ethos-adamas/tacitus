@@ -1,4 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
+import { X } from 'lucide-react';
 import {
   Dialog,
   DialogClose,
@@ -42,8 +43,8 @@ export const Modal = ({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogClose asChild>
-            <Button variant="ghost" aria-label="Chiudi">
-              ×
+            <Button variant="ghost" className="icon-button" aria-label="Chiudi">
+              <X size={22} aria-hidden="true" />
             </Button>
           </DialogClose>
         </DialogHeader>

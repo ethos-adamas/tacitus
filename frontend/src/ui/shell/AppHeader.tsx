@@ -1,4 +1,6 @@
 import { useRef, useState } from 'react';
+import { Copy, Settings } from 'lucide-react';
+import { version } from '../../../package.json';
 import { ricezioneFotoCambiata } from '../../application/store/albumSlice';
 import Brand from './Brand';
 import { useGestioneIdentitaLocale } from '../../application/hooks/useIdentitaLocale';
@@ -77,29 +79,28 @@ const AppHeader = () => {
     notifiche.permesso === 'unsupported';
 
   return (
-    <header>
-      <Brand />
-      <div className="identity">
-        <strong>{identity.nickname}</strong>
-        <code>{identity.tacitusId}</code>
-        <span className={`connection ${connection}`}>
-          {connection === 'online' ? 'online' : connection}
-        </span>
-      </div>
-      <div className="header-actions">
-        <Button className="copy-identity" onClick={shareIdentity}>
-          Copia Tacitus ID
-        </Button>
+    <>
+      <header className="app-header">
+        <Brand />
         <SettingsPopover
           trigger={
             <Button
               variant="ghost"
+              className="icon-button"
               aria-label="Impostazioni"
               title="Impostazioni">
-              ⚙
+              <Settings size={22} aria-hidden="true" />
             </Button>
           }>
           <div className="settings-content">
+            <div className="identity">
+              <strong>{identity.nickname}</strong>
+              <code>{identity.tacitusId}</code>
+              <Button onClick={shareIdentity}>
+                <Copy size={18} aria-hidden="true" />
+                Copia Tacitus ID
+              </Button>
+            </div>
             <ThemeSelector />
             <CheckboxField
               checked={fotoAbilitate}
@@ -124,10 +125,36 @@ const AppHeader = () => {
               confirmLabel="Cancella definitivamente"
               onConfirm={cancella}
             />
+            <small className="settings-help">
+              Tacitus v{version} · ethos-adamas
+            </small>
           </div>
         </SettingsPopover>
-      </div>
-    </header>
+      </header>
+      <footer className="local-identity">
+        <span className="avatar" aria-hidden="true">
+          {identity.nickname[0].toUpperCase()}
+        </span>
+        <div className="identity-summary">
+          <strong>{identity.nickname}</strong>
+          <span className={`connection ${connection}`}>
+            {connection === 'online'
+              ? 'online'
+              : connection === 'connecting'
+                ? 'Connessione…'
+                : 'Offline'}
+          </span>
+        </div>
+        <Button
+          className="copy-identity icon-button"
+          variant="ghost"
+          onClick={shareIdentity}
+          aria-label="Copia Tacitus ID"
+          title="Copia Tacitus ID">
+          <Copy size={22} aria-hidden="true" />
+        </Button>
+      </footer>
+    </>
   );
 };
 

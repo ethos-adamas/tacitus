@@ -21,7 +21,11 @@ export const SettingsPopover = ({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverPortal>
-        <PopoverContent align="end">
+        <PopoverContent
+          align="end"
+          className="settings-panel"
+          sideOffset={8}
+          collisionPadding={16}>
           <PopoverHeader className="settings-heading">
             Impostazioni
           </PopoverHeader>

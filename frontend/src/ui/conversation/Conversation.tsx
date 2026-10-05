@@ -1,4 +1,5 @@
 import { AlbumGallery } from './Album';
+import { ArrowLeft } from 'lucide-react';
 import type { TacitusId } from '../../domain/tacitusId';
 import { useEffect, useRef } from 'react';
 import { useConversazioneAttiva } from '../../application/hooks/useConversazioneAttiva';
@@ -6,6 +7,7 @@ import { useRelazioni } from '../../application/hooks/useRelazioni';
 import { useScambioMessaggi } from '../../application/hooks/useScambioMessaggi';
 import { useSessioniSicure } from '../../application/hooks/useSessioniSicure';
 import { useSelector } from '../../application/store/hooks';
+import { selectStatoContatto } from '../../application/store/selectors';
 import type { Conversazione as ConversazioneModel } from '../../domain/conversazioni';
 import { MAX_MESSAGE_LENGTH, type Messaggio } from '../../domain/messaggi';
 import type { Contatto, Relazione } from '../../domain/relazioni';
@@ -27,10 +29,11 @@ const Message = ({ message, tacitusId }: MessageProps) => (
     ) : (
       <p>{message.testo}</p>
     )}
-    <time>
+    <time dateTime={new Date(message.creatoIl).toISOString()}>
       {new Date(message.creatoIl).toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit',
+        hour12: false,
       })}
     </time>
   </article>
@@ -54,6 +57,19 @@ const ConversationContent = ({
   const connection = useSelector(state => state.connessioneRelay);
   const theme = useSelector(state => state.tema.effettivo);
   const secureSession = useSessioniSicure(contact.tacitusId);
+  const contactState = useSelector(state =>
+    selectStatoContatto(state, contact.tacitusId),
+  );
+  const status =
+    contactState === 'sessione-sicura'
+      ? 'Online'
+      : contactState === 'offline'
+        ? 'Offline'
+        : contactState === 'negoziazione'
+          ? 'Connessione sicura…'
+          : contactState === 'in-attesa'
+            ? 'In attesa del Contatto'
+            : 'Riattivazione necessaria';
   const { riattiva } = useRelazioni();
   const { aggiornaBozza, invia } = useScambioMessaggi(contact.tacitusId);
   const messagesEnd = useRef<HTMLDivElement>(null);
@@ -68,13 +84,19 @@ const ConversationContent = ({
   return (
     <>
       <div className="conversation-title">
-        <Button variant="ghost" className="back" onClick={onBack}>
-          ←
+        <Button
+          variant="ghost"
+          className="back icon-button"
+          onClick={onBack}
+          aria-label="Torna alle Conversazioni">
+          <ArrowLeft size={22} aria-hidden="true" />
         </Button>
-        <span className="avatar">{contact.nickname[0].toUpperCase()}</span>
-        <div>
+        <span className="avatar" aria-hidden="true">
+          {contact.nickname[0].toUpperCase()}
+        </span>
+        <div className="conversation-heading">
           <h2>{contact.nickname}</h2>
-          <code>{contact.tacitusId}</code>
+          <small className={`contact-state ${contactState}`}>{status}</small>
         </div>
         {relationship.stato === 'da-riattivare' && !contactIntentPending && (
           <Button disabled={connection !== 'online'} onClick={reactivate}>

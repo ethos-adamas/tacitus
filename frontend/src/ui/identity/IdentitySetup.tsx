@@ -1,4 +1,5 @@
 import Brand from '../shell/Brand';
+import { Settings } from 'lucide-react';
 import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { useGestioneIdentitaLocale } from '../../application/hooks/useIdentitaLocale';
 import { erroreMostrato } from '../../application/store/feedbackSlice';
@@ -7,6 +8,7 @@ import { Button } from '../kit/Button';
 import { SettingsPopover } from '../kit/SettingsPopover';
 import ThemeSelector from '../shell/ThemeSelector';
 import { TextInput } from '../kit/Fields';
+import { version } from '../../../package.json';
 
 const IdentitySetup = () => {
   const dispatch = useDispatch();
@@ -37,13 +39,18 @@ const IdentitySetup = () => {
         trigger={
           <Button
             variant="ghost"
-            className="landing-settings"
+            className="landing-settings icon-button"
             aria-label="Impostazioni"
             title="Impostazioni">
-            ⚙
+            <Settings size={22} aria-hidden="true" />
           </Button>
         }>
-        <ThemeSelector />
+        <div className="settings-content">
+          <ThemeSelector />
+          <small className="settings-help">
+            Tacitus v{version} · ethos-adamas
+          </small>
+        </div>
       </SettingsPopover>
       <main className="landing">
         <section className="identity-card">

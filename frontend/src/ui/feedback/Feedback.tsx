@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import {
   avvisoNascosto,
@@ -26,9 +27,10 @@ const Feedback = () => {
           {feedback.errore}
           <Button
             variant="ghost"
+            className="icon-button"
             aria-label="Chiudi errore"
             onClick={hideError}>
-            ×
+            <X size={20} aria-hidden="true" />
           </Button>
         </p>
       )}

@@ -37,6 +37,10 @@ const AddContactDialog = ({
     onClose();
   };
 
+  const changeOpen = (nextOpen: boolean) => {
+    if (!nextOpen) close();
+  };
+
   const submit = (event: FormEvent) => {
     event.preventDefault();
     try {
@@ -53,9 +57,7 @@ const AddContactDialog = ({
   return (
     <Modal
       open={open}
-      onOpenChange={nextOpen => {
-        if (!nextOpen) close();
-      }}
+      onOpenChange={changeOpen}
       trigger={trigger}
       title="Aggiungi Contatto"
       description="Entrambe le Identità devono essere online e inserire reciprocamente il Tacitus ID. Puoi avere al massimo 5 Intenti in attesa."

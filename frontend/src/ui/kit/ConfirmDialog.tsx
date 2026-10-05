@@ -59,16 +59,17 @@ export const ConfirmDialog = ({
     }
   };
 
+  const focusCancel = (event: Event) => {
+    event.preventDefault();
+    cancelRef.current?.focus();
+  };
+
   return (
     <AlertDialog open={open} onOpenChange={changeOpen}>
       <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
       <AlertDialogPortal>
         <AlertDialogOverlay />
-        <AlertDialogContent
-          onOpenAutoFocus={event => {
-            event.preventDefault();
-            cancelRef.current?.focus();
-          }}>
+        <AlertDialogContent onOpenAutoFocus={focusCancel}>
           <AlertDialogTitle className="alert-dialog-title">
             {title}
           </AlertDialogTitle>
