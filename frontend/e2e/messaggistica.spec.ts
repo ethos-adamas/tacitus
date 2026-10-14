@@ -1059,6 +1059,27 @@ test('su mobile dopo invio e ridimensionamento scorre solo la cronologia', async
     expect(await alice.page.evaluate(() => window.scrollY)).toBe(0);
     await expect(alice.page.locator('header .brand')).toBeVisible();
   }
+  // Then: the document never scrolls or rubber-bands under the fixed shell (iOS inverted scroll).
+  const scrolling = await alice.page.evaluate(() => {
+    const html = getComputedStyle(document.documentElement);
+    const body = getComputedStyle(document.body);
+    const messages = getComputedStyle(document.querySelector('.messages')!);
+    window.scrollBy(0, 200);
+    return {
+      htmlOverflow: html.overflowY,
+      bodyOverflow: body.overflowY,
+      overscroll: html.overscrollBehaviorY,
+      messagesOverscroll: messages.overscrollBehaviorY,
+      scrollY: window.scrollY,
+    };
+  });
+  expect(scrolling).toEqual({
+    htmlOverflow: 'hidden',
+    bodyOverflow: 'hidden',
+    overscroll: 'none',
+    messagesOverscroll: 'contain',
+    scrollY: 0,
+  });
   await closePersonas(alice, bob);
 });
 
