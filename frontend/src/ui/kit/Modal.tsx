@@ -22,7 +22,6 @@ type ModalProps = {
   description?: string;
   children: ReactNode;
   footer?: ReactNode;
-  size?: 'standard' | 'image';
 };
 
 export const Modal = ({
@@ -31,7 +30,6 @@ export const Modal = ({
   footer,
   onOpenChange,
   open,
-  size = 'standard',
   title,
   trigger,
 }: ModalProps) => (
@@ -39,7 +37,7 @@ export const Modal = ({
     <DialogTrigger asChild>{trigger}</DialogTrigger>
     <DialogPortal>
       <DialogOverlay />
-      <DialogContent className={size === 'image' ? 'modal-image' : undefined}>
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogClose asChild>
@@ -54,14 +52,13 @@ export const Modal = ({
           </DialogDescription>
         )}
         <div className="modal-body">{children}</div>
-        {footer ??
-          (size !== 'image' && (
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button>Chiudi</Button>
-              </DialogClose>
-            </DialogFooter>
-          ))}
+        {footer ?? (
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button>Chiudi</Button>
+            </DialogClose>
+          </DialogFooter>
+        )}
       </DialogContent>
     </DialogPortal>
   </Dialog>

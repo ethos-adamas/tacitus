@@ -27,6 +27,8 @@ import type { RootState } from '../store/store';
 import { leggiIdentitaLocale } from '../../infrastructure/identity/identitaLocaleCorrente';
 import { enqueueStateSave } from '../../infrastructure/persistence/localPersistence';
 
+const DRAFT_SAVE_DELAY_MS = 500;
+
 export const registerPersistenzaListeners = (
   startListening: StartListening,
 ): void => {
@@ -49,7 +51,15 @@ export const registerPersistenzaListeners = (
       relazioniCaricate,
       relayConnesso,
     ),
-    effect: (_action, { dispatch, getState }) => {
+    effect: async (
+      action,
+      { cancelActiveListeners, delay, dispatch, getState },
+    ) => {
+      // Every keystroke updates the draft; saving the whole encrypted history each time lags typing.
+      if (bozzaAggiornata.match(action)) {
+        cancelActiveListeners();
+        await delay(DRAFT_SAVE_DELAY_MS);
+      }
       const state = getState() as RootState;
       if (state.identitaLocale.stato !== 'pronta') return;
       const persisted = {

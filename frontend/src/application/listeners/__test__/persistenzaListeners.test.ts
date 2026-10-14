@@ -1,8 +1,9 @@
 import { albumReducer } from '../../store/albumSlice';
 import { configureStore, createListenerMiddleware } from '@reduxjs/toolkit';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseTacitusId } from '../../../domain/tacitusId';
 import {
+  bozzaAggiornata,
   conversazioneSelezionata,
   conversazioniReducer,
 } from '../../store/conversazioniSlice';
@@ -82,4 +83,56 @@ describe('persistenza della Messaggistica', () => {
       }),
     );
   });
+
+  it('salva la bozza una sola volta dopo una pausa nella digitazione', async () => {
+    // Given
+    vi.useFakeTimers();
+    const middleware = createListenerMiddleware();
+    registerPersistenzaListeners(middleware.startListening as StartListening);
+    const store = configureStore({
+      reducer: {
+        album: albumReducer,
+        conversazioni: conversazioniReducer,
+        feedback: feedbackReducer,
+        identitaLocale: identitaLocaleReducer,
+        relazioni: relazioniReducer,
+      },
+      middleware: getDefaultMiddleware =>
+        getDefaultMiddleware().prepend(middleware.middleware),
+    });
+    store.dispatch(
+      identitaLocaleDisponibile({ tacitusId: ALICE_ID, nickname: 'alice' }),
+    );
+    store.dispatch(
+      contattoAssociato({
+        tacitusId: ALICE_ID,
+        nickname: 'alice',
+        online: true,
+      }),
+    );
+    vi.mocked(enqueueStateSave).mockClear();
+
+    // When
+    for (const bozza of ['c', 'ci', 'cia', 'ciao'])
+      store.dispatch(bozzaAggiornata({ tacitusId: ALICE_ID, bozza }));
+    await vi.advanceTimersByTimeAsync(100);
+
+    // Then
+    expect(enqueueStateSave).not.toHaveBeenCalled();
+
+    // When
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    // Then
+    expect(enqueueStateSave).toHaveBeenCalledTimes(1);
+    expect(
+      vi.mocked(enqueueStateSave).mock.calls[0][1].conversazioni.perContatto[
+        ALICE_ID
+      ].bozza,
+    ).toBe('ciao');
+  });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });

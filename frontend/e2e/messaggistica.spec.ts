@@ -92,31 +92,20 @@ const settleLayout = async (page: Page) => {
   });
 };
 
-const waitForStableViewer = async (page: Page) => {
-  let previous = '';
-  let stableSamples = 0;
-  await expect
-    .poll(
-      async () => {
-        const current = await page
-          .locator('.photo-viewer-zoom-content')
-          .evaluate(element => {
-            const image = element.querySelector('img')!.getBoundingClientRect();
-            const matrix = new DOMMatrixReadOnly(
-              getComputedStyle(element).transform,
-            );
-            return `${matrix.a}:${matrix.e}:${matrix.f}:${image.width}:${image.height}`;
-          });
-        if (current === previous) stableSamples += 1;
-        else {
-          previous = current;
-          stableSamples = 0;
-        }
-        return stableSamples;
-      },
-      { timeout: 10_000 },
-    )
-    .toBeGreaterThanOrEqual(3);
+// On phones app settings live in the list: leave the open Conversazione first, return with the callback.
+const openSettings = async (page: Page) => {
+  const back = page.getByRole('button', { name: 'Torna alle Conversazioni' });
+  const title = (await back.isVisible())
+    ? await page.locator('.conversation-title h2').innerText()
+    : undefined;
+  if (title) await back.click();
+  await page.getByLabel('Impostazioni Tacitus', { exact: true }).click();
+  return async () => {
+    if (title)
+      await page
+        .getByRole('button', { name: new RegExp(`^${title},`) })
+        .click();
+  };
 };
 
 const createPng = async (page: Page, color: string, size = 32, height = size) =>
@@ -734,10 +723,7 @@ test('Regressione UI #23: font e preferenze coerenti', async ({ browser }) => {
   await settleLayout(page);
 
   // When / Then: the landing settings use the same UI font
-  await expect(page.getByLabel('Tema')).toHaveCSS(
-    'font-family',
-    /Press Start 2P/,
-  );
+  await expect(page.getByLabel('Tema')).toHaveCSS('font-family', /VT323/);
   await page.keyboard.press('Escape');
   await page.getByLabel('Nickname immutabile').fill('alice_ui23');
   await page.getByRole('button', { name: 'Crea Identità' }).click();
@@ -757,9 +743,7 @@ test('Regressione UI #23: font e preferenze coerenti', async ({ browser }) => {
   await expect(alice.page.getByText('testo leggibile')).toBeVisible();
 
   for (const theme of ['retro', 'light', 'dark', 'retro']) {
-    await alice.page
-      .getByLabel('Impostazioni Tacitus', { exact: true })
-      .click();
+    const returnToConversation = await openSettings(alice.page);
     await alice.page.getByLabel('Tema').selectOption(theme);
     await settleLayout(alice.page);
     const fonts = await alice.page.evaluate(() => {
@@ -770,37 +754,56 @@ test('Regressione UI #23: font e preferenze coerenti', async ({ browser }) => {
         ),
       ];
       const heading = document.querySelector('.settings-heading')!;
-      const message = document.querySelector('.message p')!;
-      const textarea = document.querySelector('.message-input textarea')!;
       const option = select.querySelector('option')!;
       return {
         select: getComputedStyle(select).fontFamily,
         option: getComputedStyle(option).fontFamily,
         labels: checkboxLabels.map(label => getComputedStyle(label).fontFamily),
         heading: getComputedStyle(heading).fontFamily,
-        message: getComputedStyle(message).fontFamily,
-        textarea: getComputedStyle(textarea).fontFamily,
         overflow: document.documentElement.scrollWidth <= innerWidth,
         checkboxHeight: document
           .querySelector('.settings-content .checkbox-field')!
           .getBoundingClientRect().height,
+        // #17: every checkbox shares the vertical center of its label.
+        checkboxMisalignment: Math.max(
+          ...[
+            ...document.querySelectorAll('.settings-content .checkbox-field'),
+          ].map(field => {
+            const box = field
+              .querySelector('.checkbox-control')!
+              .getBoundingClientRect();
+            const label = field
+              .querySelector(':scope > span')!
+              .getBoundingClientRect();
+            return Math.abs(
+              box.top + box.height / 2 - (label.top + label.height / 2),
+            );
+          }),
+        ),
       };
     });
     if (theme === 'retro') {
-      expect(fonts.select).toContain('Press Start 2P');
-      expect(fonts.option).toContain('Press Start 2P');
-      expect(fonts.heading).toContain('Press Start 2P');
-      expect(fonts.labels.every(font => font.includes('Press Start 2P'))).toBe(
-        true,
-      );
+      expect(fonts.select).toContain('VT323');
+      expect(fonts.option).toContain('VT323');
+      expect(fonts.heading).toContain('VT323');
+      expect(fonts.labels.every(font => font.includes('VT323'))).toBe(true);
     } else {
-      expect(fonts.select).not.toContain('Press Start 2P');
+      expect(fonts.select).not.toContain('VT323');
     }
-    expect(fonts.message).not.toContain('Press Start 2P');
-    expect(fonts.textarea).not.toContain('Press Start 2P');
     expect(fonts.overflow).toBe(true);
     expect(fonts.checkboxHeight).toBeGreaterThanOrEqual(44);
+    expect(fonts.checkboxMisalignment).toBeLessThanOrEqual(1.5);
     await alice.page.keyboard.press('Escape');
+    await returnToConversation();
+    // The Two Voices Rule: messages and composer never take the rétro interface voice.
+    await expect(alice.page.locator('.message p').first()).not.toHaveCSS(
+      'font-family',
+      /VT323/,
+    );
+    await expect(alice.page.getByLabel('Messaggio')).not.toHaveCSS(
+      'font-family',
+      /VT323/,
+    );
   }
   await closePersonas(alice, bob);
 });
@@ -837,8 +840,9 @@ test('Regressione UI: il compositore mantiene testo, focus e spazio durante il r
   await matchContacts(alice, bob);
   await alice.page.getByRole('button', { name: /bob_composer/ }).click();
 
-  // When / Then
+  // When / Then: settings live in the list header, visible at desktop width
   for (const theme of ['light', 'dark', 'retro']) {
+    await alice.page.setViewportSize({ width: 1280, height: 800 });
     await alice.page
       .getByLabel('Impostazioni Tacitus', { exact: true })
       .click();
@@ -956,7 +960,7 @@ test('Regressione UI: Contatti riducibili, impostazioni distinte e timestamp per
     const sidebar = await alice.page
       .getByRole('complementary', { name: 'Conversazioni' })
       .boundingBox();
-    expect(sidebar!.width).toBe(88);
+    expect(sidebar!.width).toBe(76);
     await expect(
       alice.page.getByRole('button', { name: /bob_catene/ }),
     ).toBeVisible();
@@ -1084,8 +1088,29 @@ test('su mobile dopo invio e ridimensionamento scorre solo la cronologia', async
     const bounds = await alice.page.locator('.composer').boundingBox();
     expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(height);
     expect(await alice.page.evaluate(() => window.scrollY)).toBe(0);
-    await expect(alice.page.locator('header .brand')).toBeVisible();
+    await expect(alice.page.locator('.conversation-title')).toBeInViewport();
   }
+  // Then: the document never scrolls or rubber-bands under the fixed shell (iOS inverted scroll).
+  const scrolling = await alice.page.evaluate(() => {
+    const html = getComputedStyle(document.documentElement);
+    const body = getComputedStyle(document.body);
+    const messages = getComputedStyle(document.querySelector('.messages')!);
+    window.scrollBy(0, 200);
+    return {
+      htmlOverflow: html.overflowY,
+      bodyOverflow: body.overflowY,
+      overscroll: html.overscrollBehaviorY,
+      messagesOverscroll: messages.overscrollBehaviorY,
+      scrollY: window.scrollY,
+    };
+  });
+  expect(scrolling).toEqual({
+    htmlOverflow: 'hidden',
+    bodyOverflow: 'hidden',
+    overscroll: 'none',
+    messagesOverscroll: 'contain',
+    scrollY: 0,
+  });
   await closePersonas(alice, bob);
 });
 
@@ -1325,9 +1350,10 @@ test('Album: consenso iniziale, accettazione successiva, persistenza e revoca', 
     .click();
   await bob.page.getByLabel('Foto da questo Contatto').selectOption('allow');
   await bob.page.getByRole('button', { name: 'Chiudi' }).last().click();
-  await bob.page.getByLabel('Impostazioni Tacitus', { exact: true }).click();
+  const returnToAlice = await openSettings(bob.page);
   await bob.page.getByText('Ricevi foto e album', { exact: true }).click();
   await bob.page.getByLabel('Impostazioni Tacitus', { exact: true }).click();
+  await returnToAlice();
   await alice.page.getByLabel('Scegli foto').setInputFiles(files.slice(0, 1));
   await alice.page.getByRole('button', { name: 'Invia album' }).click();
   await expect(
@@ -1367,14 +1393,14 @@ test('Album: consenso iniziale, accettazione successiva, persistenza e revoca', 
   await closePersonas(alice, bob);
 });
 
-test('Regressione UI #19: tastiera zoom — Album: anteprima e download esplicito', async ({
+test('Regressione UI #19/#25: anteprima foto minimale, centrata e navigabile', async ({
   browser,
 }) => {
   test.skip(
     test.info().project.name !== 'chromium-desktop',
-    'Rotellina e pan sono verificati nel progetto desktop; il progetto mobile copre il pinch.',
+    'Rotellina e Ctrl+rotellina sono verificati su desktop; il progetto mobile copre il pinch.',
   );
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   // Given
   const alice = await createPersona(browser, 'alice_viewer');
   const bob = await createPersona(browser, 'bob_viewer');
@@ -1386,16 +1412,33 @@ test('Regressione UI #19: tastiera zoom — Album: anteprima e download esplicit
   await bob.page.getByLabel('Foto da questo Contatto').selectOption('allow');
   await bob.page.getByRole('button', { name: 'Chiudi' }).last().click();
   await alice.page.getByRole('button', { name: /bob_viewer/ }).click();
-  const png = await createPng(alice.page, '#2f8f67', 1200, 600);
-  await alice.page.getByLabel('Scegli foto').setInputFiles({
-    name: 'foto-viewer.png',
-    mimeType: 'image/png',
-    buffer: Buffer.from(png, 'base64'),
-  });
+  const files = [];
+  for (const [index, [color, width, height]] of (
+    [
+      ['#2f8f67', 1200, 600],
+      ['#8f2f5f', 600, 1200],
+    ] as const
+  ).entries())
+    files.push({
+      name: `foto-viewer-${index}.png`,
+      mimeType: 'image/png',
+      buffer: Buffer.from(
+        await createPng(alice.page, color, width, height),
+        'base64',
+      ),
+    });
+  await alice.page.getByLabel('Scegli foto').setInputFiles(files);
   await alice.page.getByRole('button', { name: 'Invia album' }).click();
-  await expect(alice.page.locator('.album-gallery img')).toHaveCount(1, {
+  await expect(alice.page.locator('.album-gallery img')).toHaveCount(2, {
     timeout: 30_000,
   });
+  const shownPhoto = () =>
+    alice.page.getByRole('dialog').locator('.photo-viewer-image');
+  const readScale = () =>
+    alice.page.locator('.photo-viewer-zoom-content').evaluate(element => {
+      const matrix = new DOMMatrixReadOnly(getComputedStyle(element).transform);
+      return matrix.a;
+    });
 
   // When: opening the thumbnail must not download anything
   let automaticDownload = false;
@@ -1406,94 +1449,38 @@ test('Regressione UI #19: tastiera zoom — Album: anteprima e download esplicit
   await alice.page.getByRole('button', { name: 'Apri Foto 1' }).click();
   await expect(alice.page.getByRole('dialog')).toBeVisible();
   await settleLayout(alice.page);
-  await waitForStableViewer(alice.page);
   alice.page.off('download', rememberDownload);
 
-  // Then: wheel changes the real transform and reset restores the fit
-  const zoomArea = alice.page.locator('.photo-viewer-zoom-area');
-  await expect(zoomArea).toBeVisible();
-  const readTransform = () =>
-    zoomArea.locator('.photo-viewer-zoom-content').evaluate(element => {
-      const matrix = new DOMMatrixReadOnly(getComputedStyle(element).transform);
-      const image = element.querySelector('img')!.getBoundingClientRect();
-      return { scale: matrix.a, width: image.width, x: matrix.e, y: matrix.f };
-    });
-  const initial = await readTransform();
-  await zoomArea.focus();
-  await expect(zoomArea).toBeFocused();
-  await zoomArea.press('+');
-  await expect
-    .poll(async () => (await readTransform()).scale)
-    .toBeGreaterThan(initial.scale);
-  const keyboardZoomed = await readTransform();
-  await zoomArea.press('-');
-  await expect
-    .poll(async () => (await readTransform()).scale)
-    .toBeLessThan(keyboardZoomed.scale);
-  for (let index = 0; index < 16; index++) await zoomArea.press('+');
-  await expect
-    .poll(async () => (await readTransform()).scale)
-    .toBeGreaterThan(initial.scale * 3);
-  const beforePan = await readTransform();
-  await zoomArea.press('ArrowLeft');
-  let afterPan = await readTransform();
-  if (afterPan.x === beforePan.x) {
-    await zoomArea.press('ArrowRight');
-    afterPan = await readTransform();
-  }
-  expect(afterPan.x).not.toBe(beforePan.x);
-  await zoomArea.press('0');
-  await expect
-    .poll(async () => (await readTransform()).scale)
-    .toBeCloseTo(initial.scale, 2);
-  await expect
-    .poll(async () => (await readTransform()).width)
-    .toBeCloseTo(initial.width, 0);
-
-  const area = await zoomArea.boundingBox();
-  expect(area).toBeTruthy();
-  await zoomArea.hover();
-  await alice.page.mouse.move(
-    area!.x + area!.width / 2,
-    area!.y + area!.height / 2,
-  );
-  await zoomArea.dispatchEvent('wheel', {
-    deltaY: -300,
-    clientX: area!.x + area!.width / 2,
-    clientY: area!.y + area!.height / 2,
-  });
-  await expect
-    .poll(async () => (await readTransform()).scale)
-    .toBeGreaterThan(initial.scale);
-  const zoomed = await readTransform();
-  expect(zoomed.width).toBeGreaterThan(initial.width);
-  await zoomArea.dispatchEvent('mousedown', {
-    button: 0,
-    clientX: area!.x + area!.width / 2,
-    clientY: area!.y + area!.height / 2,
-  });
-  await zoomArea.dispatchEvent('mousemove', {
-    buttons: 1,
-    clientX: area!.x + area!.width / 2 - 100,
-    clientY: area!.y + area!.height / 2,
-  });
-  await zoomArea.dispatchEvent('mouseup', {
-    button: 0,
-    clientX: area!.x + area!.width / 2 - 100,
-    clientY: area!.y + area!.height / 2,
-  });
-  await expect.poll(async () => (await readTransform()).x).not.toBe(zoomed.x);
-  await alice.page.getByRole('button', { name: 'Ripristina zoom' }).click();
-  await expect
-    .poll(async () => (await readTransform()).scale)
-    .toBeCloseTo(initial.scale, 2);
+  // Then: only the photo, the counter, download and close are visible
   expect(automaticDownload).toBe(false);
-  await alice.page.getByRole('button', { name: 'Aumenta zoom' }).focus();
-  const toolbarFocused = await readTransform();
-  await alice.page.keyboard.press('ArrowRight');
-  await expect
-    .poll(async () => (await readTransform()).x)
-    .toBeCloseTo(toolbarFocused.x, 0);
+  await expect(shownPhoto()).toHaveAttribute('alt', 'Foto 1');
+  await expect(alice.page.getByText('1 / 2')).toBeVisible();
+  await expect(alice.page.locator('.photo-viewer-bar')).not.toContainText(
+    /rotellina|zoom/i,
+  );
+  await expect(alice.page.getByRole('button', { name: /zoom/i })).toHaveCount(
+    0,
+  );
+
+  // When / Then: Ctrl+wheel zooms the photo, the plain wheel browses
+  const box = await alice.page.locator('.photo-viewer-zoom-area').boundingBox();
+  expect(box).toBeTruthy();
+  await alice.page.mouse.move(
+    box!.x + box!.width / 2,
+    box!.y + box!.height / 2,
+  );
+  expect(await readScale()).toBeCloseTo(1, 2);
+  await alice.page.keyboard.down('Control');
+  await alice.page.mouse.wheel(0, -300);
+  await alice.page.keyboard.up('Control');
+  await expect.poll(readScale).toBeGreaterThan(1);
+  await expect(shownPhoto()).toHaveAttribute('alt', 'Foto 1');
+  await alice.page.mouse.wheel(0, 120);
+  await expect(shownPhoto()).toHaveAttribute('alt', 'Foto 2');
+  await expect(alice.page.getByText('2 / 2')).toBeVisible();
+  expect(await readScale()).toBeCloseTo(1, 2);
+  await alice.page.keyboard.press('ArrowLeft');
+  await expect(shownPhoto()).toHaveAttribute('alt', 'Foto 1');
 
   // When / Then: only the explicit control downloads the file
   const downloadPromise = alice.page.waitForEvent('download');
@@ -1505,55 +1492,46 @@ test('Regressione UI #19: tastiera zoom — Album: anteprima e download esplicit
   await expect(
     alice.page.getByRole('button', { name: 'Apri Foto 1' }),
   ).toBeFocused();
-  // When / Then: landscape images stay centered and controls fit every theme.
+
+  // When / Then: the photo opens centered and unzoomed in every theme and size
   for (const theme of ['light', 'dark', 'retro']) {
     await alice.page
       .getByLabel('Impostazioni Tacitus', { exact: true })
       .click();
     await alice.page.getByLabel('Tema').selectOption(theme);
     await alice.page.keyboard.press('Escape');
-    await settleLayout(alice.page);
-    for (const width of [1280, 390, 320]) {
-      await alice.page.setViewportSize({ width, height: 844 });
+    for (const [width, height] of [
+      [1920, 1080],
+      [393, 852],
+    ]) {
+      await alice.page.setViewportSize({ width, height });
+      if (
+        width < 720 &&
+        !(await alice.page.locator('.album-gallery').isVisible())
+      )
+        await alice.page.getByRole('button', { name: /bob_viewer/ }).click();
       await alice.page.getByRole('button', { name: 'Apri Foto 1' }).click();
-      await waitForStableViewer(alice.page);
-      const geometry = await alice.page
-        .locator('.photo-viewer-stage')
-        .evaluate(stage => {
-          const rect = stage.getBoundingClientRect();
-          const image = stage
-            .querySelector('.photo-viewer-image')!
-            .getBoundingClientRect();
-          const dialog = stage.closest('[role="dialog"]')!;
-          return {
-            xOffset: Math.abs(
-              image.x + image.width / 2 - rect.x - rect.width / 2,
-            ),
-            yOffset: Math.abs(
-              image.y + image.height / 2 - rect.y - rect.height / 2,
-            ),
-            inside:
-              image.width <= rect.width + 1 && image.height <= rect.height + 1,
-            overflow:
-              dialog.scrollWidth > dialog.clientWidth ||
-              dialog.scrollHeight > dialog.clientHeight,
-          };
-        });
-      expect(
-        geometry.xOffset,
-        `${theme} ${width}px: ${JSON.stringify(geometry)}`,
-      ).toBeLessThanOrEqual(1);
-      expect(
-        geometry.yOffset,
-        `${theme} ${width}px: ${JSON.stringify(geometry)}`,
-      ).toBeLessThanOrEqual(1);
-      expect(geometry.inside).toBe(true);
-      expect(geometry.overflow).toBe(false);
-      await expect(
-        alice.page.getByRole('button', { name: 'Chiudi', exact: true }),
-      ).toHaveCount(1);
+      await settleLayout(alice.page);
+      const geometry = await shownPhoto().evaluate(image => {
+        const rect = image.getBoundingClientRect();
+        return {
+          xOffset: Math.abs(rect.x + rect.width / 2 - innerWidth / 2),
+          inside:
+            rect.left >= 0 &&
+            rect.top >= 0 &&
+            rect.right <= innerWidth &&
+            rect.bottom <= innerHeight,
+          upscaled: rect.width > (image as HTMLImageElement).naturalWidth + 1,
+        };
+      });
+      const label = `${theme} ${width}px: ${JSON.stringify(geometry)}`;
+      expect(geometry.xOffset, label).toBeLessThanOrEqual(1);
+      expect(geometry.inside, label).toBe(true);
+      expect(geometry.upscaled, label).toBe(false);
+      expect(await readScale(), label).toBeCloseTo(1, 2);
       await alice.page.keyboard.press('Escape');
     }
+    await alice.page.setViewportSize({ width: 1280, height: 720 });
   }
   await closePersonas(alice, bob);
 });

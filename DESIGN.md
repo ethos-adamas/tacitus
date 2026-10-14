@@ -1,336 +1,319 @@
 ---
 name: "Tacitus"
-description: "A quiet messaging desk with readable conversations and subtly translucent controls."
+description: "Lettera: a quiet, rounded Olivetti office object where every Contatto owns a flat colour field."
 colors:
-  "page-light": "#eaeced"
-  "surface-light": "#f4f5f6"
-  "surface-soft-light": "#e4e8e5"
-  "input-light": "#fafbfa"
-  "text-light": "#222927"
-  "muted-light": "#626c67"
-  "green-light": "#466453"
-  "on-green-light": "#fff"
-  "pale-light": "#dfe9e3"
-  "incoming-light": "#e9eceb"
-  "line-light": "#d5dcd7"
+  "page-light": "#e9e7e1"
+  "rail-light": "#dfe5e2"
+  "surface-light": "#faf9f6"
+  "selected-light": "#ffffff"
+  "input-light": "#ffffff"
+  "text-light": "#1c1c1a"
+  "muted-light": "#64635c"
+  "line-light": "#d3d0c7"
+  "action-light": "#d2322d"
+  "on-action-light": "#ffffff"
+  "outgoing-light": "#dce5ee"
+  "incoming-light": "#eeece6"
+  "secure-light": "#2f8a83"
   "danger-light": "#a13d3b"
-  "focus-light": "#466453"
-  "avatar-light": "#466453"
-  "avatar-text-light": "#fff"
-  "error-light": "#853e3b"
-  "success-light": "#466453"
-  "backdrop-light": "#19231f66"
-  "page-dark": "#161c19"
-  "surface-dark": "#202723"
-  "surface-soft-dark": "#28322c"
-  "input-dark": "#303b34"
-  "text-dark": "#edf2ee"
-  "muted-dark": "#abb9af"
-  "green-dark": "#a5c3ae"
-  "on-green-dark": "#17241b"
-  "pale-dark": "#364b3e"
-  "incoming-dark": "#2c3530"
-  "line-dark": "#435047"
-  "danger-dark": "#f0aba5"
-  "focus-dark": "#a5c3ae"
-  "avatar-dark": "#4c6655"
-  "avatar-text-dark": "#f2f6f3"
-  "error-dark": "#853e3b"
-  "success-dark": "#42614e"
-  "backdrop-dark": "#08110ccc"
-  "page-retro": "#0b120c"
-  "surface-retro": "#111a13"
-  "surface-soft-retro": "#18251b"
-  "input-retro": "#1b2b1f"
-  "text-retro": "#d9efd9"
-  "muted-retro": "#a2bba3"
-  "green-retro": "#a3d58b"
-  "on-green-retro": "#101b11"
-  "pale-retro": "#2a402b"
-  "incoming-retro": "#1c2b20"
-  "line-retro": "#3d5941"
-  "danger-retro": "#efb0a1"
-  "focus-retro": "#a3d58b"
-  "avatar-retro": "#344f33"
-  "avatar-text-retro": "#dbf4cb"
-  "error-retro": "#783c32"
-  "success-retro": "#385438"
-  "backdrop-retro": "#020b04cc"
+  "focus-light": "#2f5aa8"
+  "field-cobalt-light": "#2f5aa8"
+  "field-ochre-light": "#d99a1e"
+  "field-teal-light": "#2f8a83"
+  "field-violet-light": "#6d4c9a"
+  "field-olive-light": "#6e8b3d"
+  "field-brick-light": "#c25b3a"
+  "page-dark": "#111110"
+  "rail-dark": "#1a1e1d"
+  "surface-dark": "#1c1c1a"
+  "selected-dark": "#2a2f2d"
+  "input-dark": "#252523"
+  "text-dark": "#efede7"
+  "muted-dark": "#a29f97"
+  "line-dark": "#343330"
+  "action-dark": "#e8463b"
+  "outgoing-dark": "#22344a"
+  "incoming-dark": "#2a2a27"
+  "secure-dark": "#4fb0a7"
+  "danger-dark": "#f0a39a"
+  "focus-dark": "#8fb0f0"
+  "field-cobalt-dark": "#4f79c4"
+  "field-ochre-dark": "#d9a13a"
+  "field-teal-dark": "#3e9c94"
+  "field-violet-dark": "#8a6bbe"
+  "field-olive-dark": "#85a050"
+  "field-brick-dark": "#d0704f"
+  "page-retro": "#050806"
+  "rail-retro": "#0b130d"
+  "surface-retro": "#08100a"
+  "selected-retro": "#13261a"
+  "input-retro": "#0e1a11"
+  "text-retro": "#b6f2ae"
+  "muted-retro": "#7fb279"
+  "line-retro": "#1f3523"
+  "action-retro": "#ffb000"
+  "on-action-retro": "#140e00"
+  "outgoing-retro": "#133a1f"
+  "incoming-retro": "#0f1c13"
+  "secure-retro": "#55ff55"
+  "danger-retro": "#ff8a7a"
+  "field-cyan-retro": "#55ffff"
+  "field-yellow-retro": "#ffff55"
+  "field-green-retro": "#55ff55"
+  "field-magenta-retro": "#ff55ff"
+  "field-lilac-retro": "#aaaaff"
+  "field-orange-retro": "#ff8855"
 typography:
-  headline:
-    fontFamily: "Roboto, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "2rem"
-    fontWeight: 500
-    lineHeight: 1.25
-    letterSpacing: "-.02em"
+  brand:
+    fontFamily: "'Archivo Variable', ui-sans-serif, system-ui, sans-serif"
+    fontSize: "16px"
+    fontWeight: 600
+    letterSpacing: ".3em"
   title:
-    fontFamily: "Roboto, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "24px"
-    fontWeight: 500
+    fontFamily: "'Archivo Variable', ui-sans-serif, system-ui, sans-serif"
+    fontSize: "17px"
+    fontWeight: 600
     lineHeight: 1.25
+  name:
+    fontFamily: "'Archivo Variable', ui-sans-serif, system-ui, sans-serif"
+    fontSize: "15px"
+    fontWeight: 600
+    lineHeight: 1.25
+  section-label:
+    fontFamily: "'Archivo Variable', ui-sans-serif, system-ui, sans-serif"
+    fontSize: "12px"
+    fontWeight: 600
+    letterSpacing: ".08em"
   body:
-    fontFamily: "Roboto, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "20px"
-    fontWeight: 400
-    lineHeight: 1.4
-  body-mobile:
-    fontFamily: "Roboto, ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "'Archivo Variable', ui-sans-serif, system-ui, sans-serif"
     fontSize: "16px"
     fontWeight: 400
-    lineHeight: 1.4
-  composer:
-    fontFamily: "Roboto, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "18px"
+    lineHeight: "22px"
+  body-mobile:
+    fontFamily: "'Archivo Variable', ui-sans-serif, system-ui, sans-serif"
+    fontSize: "15px"
     fontWeight: 400
-    lineHeight: "24px"
-  label:
-    fontFamily: "Roboto, ui-sans-serif, system-ui, sans-serif"
-    fontSize: ".875rem"
-    fontWeight: 500
-  support:
-    fontFamily: "Roboto, ui-sans-serif, system-ui, sans-serif"
-    fontSize: ".8rem"
-    lineHeight: 1.6
-  retro-label:
-    fontFamily: "'Press Start 2P', ui-monospace, monospace"
-    fontSize: ".7rem"
-    lineHeight: 1.8
-  retro-headline:
-    fontFamily: "'Press Start 2P', ui-monospace, monospace"
-    fontSize: "1.25rem"
-    fontWeight: 500
-    lineHeight: 1.7
-    letterSpacing: "0"
+    lineHeight: "20px"
+  status:
+    fontFamily: "'Archivo Variable', ui-sans-serif, system-ui, sans-serif"
+    fontSize: "13px"
+    fontWeight: 400
+    lineHeight: 1.35
+  typewriter:
+    fontFamily: "'Courier Prime', ui-monospace, monospace"
+    fontSize: "11px"
+    lineHeight: 1.3
+  retro-voice:
+    fontFamily: "'VT323', ui-monospace, monospace"
+    fontSize: "calc(15px * 1.3)"
+    fontWeight: 400
+  retro-reading:
+    fontFamily: "'JetBrains Mono Variable', ui-monospace, monospace"
+    fontSize: "16px"
+    lineHeight: "22px"
 rounded:
-  "surface": "16px"
-  "compact": "8px"
-  "retro": "0px"
+  "panel": "20px"
+  "bubble": "16px"
+  "row": "14px"
+  "control": "12px"
+  "pill": "999px"
   "circle": "50%"
 spacing:
   "1": "4px"
   "2": "8px"
   "3": "12px"
   "4": "16px"
+  "5": "20px"
   "6": "24px"
-  "8": "32px"
 components:
   button-primary:
-    backgroundColor: "{colors.green-light}"
-    textColor: "{colors.on-green-light}"
-    typography: "{typography.label}"
-    rounded: "{rounded.surface}"
+    backgroundColor: "{colors.action-light}"
+    textColor: "{colors.on-action-light}"
+    rounded: "{rounded.pill}"
     padding: "8px 12px"
   button-secondary:
     backgroundColor: "{colors.surface-light}"
     textColor: "{colors.text-light}"
-    typography: "{typography.label}"
-    rounded: "{rounded.surface}"
+    rounded: "{rounded.pill}"
     padding: "8px 12px"
   button-danger:
     backgroundColor: "{colors.surface-light}"
     textColor: "{colors.danger-light}"
-    typography: "{typography.label}"
-    rounded: "{rounded.surface}"
-    padding: "8px 12px"
-  button-ghost:
-    backgroundColor: "transparent"
-    textColor: "{colors.text-light}"
-    typography: "{typography.label}"
-    rounded: "{rounded.surface}"
+    rounded: "{rounded.pill}"
     padding: "8px 12px"
   input:
     backgroundColor: "{colors.input-light}"
     textColor: "{colors.text-light}"
-    rounded: "{rounded.surface}"
+    rounded: "{rounded.control}"
     padding: "8px 12px"
-  contact-selected:
-    backgroundColor: "{colors.pale-light}"
+  contact-row:
+    backgroundColor: "{colors.rail-light}"
     textColor: "{colors.text-light}"
-    rounded: "{rounded.surface}"
-    padding: "14px 16px"
-  unread:
-    backgroundColor: "{colors.green-light}"
-    textColor: "{colors.on-green-light}"
+    typography: "{typography.name}"
+    rounded: "{rounded.row}"
+    padding: "10px 12px"
+  contact-selected:
+    backgroundColor: "{colors.selected-light}"
+    textColor: "{colors.text-light}"
+    rounded: "{rounded.row}"
+    padding: "10px 12px"
+  avatar:
+    backgroundColor: "{colors.field-cobalt-light}"
+    textColor: "{colors.on-action-light}"
     rounded: "{rounded.circle}"
-    padding: "0 6px"
-    height: "24px"
-  identity-card:
-    rounded: "{rounded.surface}"
-    padding: "40px"
-    width: "min(460px, 100%)"
+    size: "40px"
+  conversation-band:
+    backgroundColor: "{colors.field-cobalt-light}"
+    textColor: "{colors.on-action-light}"
+    typography: "{typography.title}"
+    padding: "10px 12px 10px 24px"
   message-incoming:
     backgroundColor: "{colors.incoming-light}"
     textColor: "{colors.text-light}"
     typography: "{typography.body}"
-    rounded: "{rounded.surface}"
-    padding: "12px 18px"
+    rounded: "{rounded.bubble}"
+    padding: "8px 12px"
   message-outgoing:
-    backgroundColor: "{colors.pale-light}"
+    backgroundColor: "{colors.outgoing-light}"
     textColor: "{colors.text-light}"
     typography: "{typography.body}"
-    rounded: "{rounded.surface}"
-    padding: "12px 18px"
+    rounded: "{rounded.bubble}"
+    padding: "8px 12px"
+  composer:
+    backgroundColor: "{colors.input-light}"
+    textColor: "{colors.text-light}"
+    rounded: "{rounded.pill}"
+    height: "52px"
   send:
-    backgroundColor: "{colors.green-light}"
-    textColor: "{colors.on-green-light}"
+    backgroundColor: "{colors.action-light}"
+    textColor: "{colors.on-action-light}"
     rounded: "{rounded.circle}"
-    width: "54px"
-    height: "54px"
-    padding: "0"
-  composer-group:
-    rounded: "{rounded.surface}"
-    padding: "10px 12px 10px 16px"
-  photo-viewer-toolbar:
-    rounded: "{rounded.surface}"
-    padding: "8px"
+    size: "52px"
+  unread:
+    backgroundColor: "{colors.action-light}"
+    textColor: "{colors.on-action-light}"
+    rounded: "{rounded.pill}"
+    height: "22px"
 ---
 # Design System: Tacitus
 
 ## Overview
 
-**Creative North Star: "The Translucent Reading Desk"**
+**Creative North Star: "Lettera"**
 
-The translucent reading desk gives private conversation a calm, consistent home. Light uses cool paper and charcoal, dark uses quiet forest neutrals, and rétro keeps a pixel voice without reducing the legibility of messages.
+Tacitus is a quiet Olivetti office object, rounded and precise. The Olivetti graphic programme (Giovanni Pintori's flat colour fields, the Lettera 22, the M24 personal computer) lends four things only: type, palette, density and one signature move. The two-pane layout is the user's fixed constraint; the world never reorganises it.
 
-Navigation and controls carry subtle transparency; the conversation reading plane stays opaque. Sparse accents and restrained depth keep attention on names, message content, and the next action. Identity creation, settings, consent, photos, empty states, and feedback use the same visual grammar.
+The signature move: every Contatto owns a flat colour field. It fills their avatar in the list and floods the band of their open Conversazione, so you always know who you are writing to. Red is Olivetti's voice for action and is spent only on sending and on unread counts.
+
+Light ("Lettera 22") is warm grey paper with an azure-green rail. Dark ("Notte") keeps the same roles at night. Rétro ("M24") is a green phosphor screen with a CGA field palette and an amber action colour; it keeps the same shapes and spacing.
 
 **Key Characteristics:**
 
-- Conversation-centered hierarchy.
-- Subtle transparency around an opaque reading plane.
-- One spatial rhythm across light, dark, and rétro.
-- Plain, readable message text in every theme.
-- Explicit states and accessible controls.
+- One topology, spacing rhythm and set of radii in all three themes.
+- Flat colour fields identify people; no gradients, glass or cast shadows on resting surfaces.
+- Desktop is relaxed: 16px reading text, 40px avatars, a 52px composer.
+- One Conversazione at a time on phones, its band running under the status bar.
 
 ## Colors
 
-A restrained green accent sits among theme-specific neutral surfaces. The frontmatter records the literal values in `frontend/src/index.css`; the suffix names its theme. Root variables are the runtime authority, including when Sistema resolves to light or dark. Frontmatter component references describe the light baseline; other themes use the corresponding suffixed color values and rétro corners. Sidecar snippets remain live-bound to those runtime variables.
+Restrained neutrals tinted from each theme's world, six contact fields, and one action colour. Frontmatter values are the literal `:root` variables in `frontend/src/index.css`; the suffix names the theme.
 
 ### Primary
 
-- **Quiet Green** (`green-light`, `green-dark`, `green-retro`): primary action, selection details, focus, and secure-session indicators. The paired `on-green` value provides action text contrast.
-- **Pale Green** (`pale-*`): selected contacts, outgoing message bubbles, and shared control hover states.
+- **Olivetti Red** (`action-*`; amber in rétro): send, primary buttons, unread badges and the caret. Nothing else is red.
+
+### Secondary
+
+- **Contact Fields** (`field-*`, six per theme): avatar fills and the open Conversazione's band. `contactField()` hashes the Tacitus ID, so a Contatto keeps its colour. Each field has a paired ink (`--field-ink-N`) with sufficient contrast; ochre and olive take dark ink.
 
 ### Neutral
 
-- **Cool Paper / Forest Slate / Terminal Paper** (`page-*`, `surface-*`): outer canvas and opaque conversation plane. Light's conversation paper is distinct from its cooler outer canvas.
-- **Frosted Navigation** (`surface-soft-*`): navigation base; glass mixes this with transparency.
-- **Field Paper** (`input-*`): fields and the translucent control base.
-- **Charcoal / Soft White / Phosphor White** (`text-*`): primary text. `muted-*` carries descriptions, timestamps, and secondary status labels.
-- **Incoming Paper** (`incoming-*`): incoming message bubbles, separated from outgoing bubbles by tone and alignment.
-- **Quiet Divider** (`line-*`): control borders, panel separators, and grouping within settings.
-- **Avatar Ink and Paper** (`avatar-*`, `avatar-text-*`): initials and consistent identity marks.
-- **Overlay Veil** (`backdrop-*`): modal backdrop, separate from the lighter glass material.
+- **Paper / Night / Phosphor** (`page-*`): the outer canvas.
+- **Rail** (`rail-*`): the navigation column, whose tint carries the shell's colour.
+- **Reading Plane** (`surface-*`): the opaque Conversazione and every dialog.
+- **Selection** (`selected-*`): the selected contact row and emoji suggestion.
+- **Ink and Muted** (`text-*`, `muted-*`): primary and secondary text; muted carries status, timestamps and section labels.
+- **Bubbles** (`outgoing-*`, `incoming-*`): direction is shown by tone and alignment.
+- **Secure** (`secure-*`): the filled status dot of a Sessione sicura and an online relay. Other states use a hollow ring.
 
-### Semantic feedback
+**The Red Acts Rule.** Red (amber in rétro) marks only what acts or demands attention now: send, primary action, unread. Never decoration, never a state label.
 
-`danger-*` marks inline errors and destructive controls. `error-*` and `success-*` supply toast backgrounds with white text; they are not interchangeable with the primary accent or inline danger text.
-
-**The Reading Plane Rule.** Keep the conversation reading surface opaque; translucency belongs to navigation and controls.
+**The Field Belongs to a Person Rule.** Contact fields identify a Contatto and nothing else; never use them for UI chrome, states or categories.
 
 ## Typography
 
-**Body and reading font:** self-hosted Roboto, followed by the sans-serif stack in the frontmatter.
-
-**Interface font:** Roboto in light and dark; the existing locally bundled Press Start 2P in rétro, followed by a monospace fallback. Reading text retains Roboto in rétro.
-
-**Character:** neutral and readable, with medium weight for names and important controls. Rétro's pixel lettering remains a deliberate interface variation rather than a font change for conversation content.
+**Interface and reading:** Archivo (self-hosted variable). **Typewriter:** Courier Prime for timestamps, Tacitus IDs and the relay status. **Rétro:** VT323 is the interface voice (brand, names, labels, buttons), scaled by `--ui: 1.3` because it draws small; JetBrains Mono carries messages, statuses and the composer, and also the typewriter role.
 
 ### Hierarchy
 
-- **Headline:** identity setup uses `headline`; its mobile size is (1.75rem). Rétro uses `retro-headline` at (1.25rem) on both desktop and mobile; its theme selector takes precedence over the mobile size rule.
-- **Title:** conversation heading uses `title`, reducing to (20px) on mobile. Panel headings use (20px) desktop and (18px) mobile; rétro uses (.75rem) with (1.8) line height.
-- **Body:** messages use `body` desktop and `body-mobile` mobile. Message width is capped at (65ch) and (80%) desktop, (88%) mobile.
-- **Composer:** `composer` desktop, (16px) mobile, always in the reading font.
-- **Label:** shared buttons and form labels use `label`; rétro applies `retro-label` to interface buttons and labels. Contact names remain Roboto (20px, 500).
-- **Support:** `support` for technical help; descriptions use (.875rem/1.6), timestamp text (14px) desktop and (12px) mobile. IDs use the native monospace stack (.8rem/1.6).
-- **Brand:** TACITUS uses medium-weight interface text (26px, .24em tracking) desktop, (20px) mobile. Rétro removes tracking and stays at (16px) on desktop and mobile; its theme selector takes precedence over the mobile size rule.
+- **Brand:** TACITUS 16px semibold, .3em tracking (rétro .12em).
+- **Title:** Conversazione band name 17px semibold; 16px on phones.
+- **Name:** contact names 15px semibold (16px on phones), single line with ellipsis.
+- **Section label:** 12px semibold uppercase, .08em tracking, muted.
+- **Body:** messages 16/22 desktop, 15/20 phone; composer 16px.
+- **Status:** 13px muted with a 7px dot; 12px in the phone band.
+- **Typewriter:** 11px timestamps, 12px relay status.
 
-**The Two Voices Rule.** Rétro changes interface lettering, not the reading font used for messages, nicknames, descriptions, and the composer.
+**The Two Voices Rule.** Rétro changes the interface voice, never the readability of messages: messages and composer stay in a clean monospace.
 
 ## Layout
 
-The desktop shell sits (24px) from the viewport edges. A two-column grid gives navigation a minimum (280px), normally (25%) of the width, beside a flexible conversation. The panel gap is (8px). Expanded navigation uses rows of (98px), flexible height, and (104px); the conversation spans all three. Above (720px), navigation can collapse to an (88px) avatar rail with rows of (98px), flexible height, and (128px). Its toggle exposes expanded state and controls the contact list; contact names and states remain available to assistive technology and through descriptive titles.
+The desktop shell sits 16px from the viewport edges: a 340px rail, a 12px gap and a flexible Conversazione. The rail stacks a 60px brand row, the contact list, and the local identity row. The Conversazione stacks the coloured band (≥64px), the history and the composer. The message lane's side padding is `clamp(24px, 9vw, 160px)`; bubbles cap at `min(70%, 560px)`. Above 720px the rail collapses to a 76px avatar column that keeps accessible names, states and unread counts.
 
-At (720px) and below, the shell becomes edge-to-edge. The list and the open conversation alternate in one column, with a visible back control. The brand row is (64px), the open conversation heading (76px), and the closed-list identity row (88px). Active conversation content replaces the list and local identity footer.
+At 720px and below the shell is edge-to-edge on the rail colour. The list view shows the brand row (with the safe-area inset), contacts and the identity row. An open Conversazione replaces all of it, header included: its band starts under the status bar and holds back, avatar, name, state and options. Settings are reached from the list.
 
-Use the recorded spacing scale: compact internal gaps, larger group spacing, and generous message-lane padding. Desktop messages use (32px) top and (56px) bottom padding; lateral padding adapts with `min(6.5vw, 100px)`. Mobile messages use (24px 16px). Identity setup centers a card of at most (460px), with (40px) desktop padding and (32px 24px) mobile padding.
-
-The authenticated shell tracks `visualViewport.height` and `offsetTop` through `--viewport-height` and `--viewport-top`, falling back to window geometry. Preserve that behavior for the mobile keyboard. Bottom controls and feedback use safe-area insets. Dialogs scroll within the viewport; settings use collision-aware placement. Standard dialogs cap width at (500px), with (16px) padding and (24px) from the existing (640px) utility breakpoint.
+The document never scrolls: `html` and `body` hide overflow and overscroll, and only the history and contact list scroll, with contained overscroll. The shell tracks `visualViewport` height and offset for the mobile keyboard. Bottom controls use safe-area insets.
 
 ## Elevation & Depth
 
-Resting panels use tonal layering, quiet dividers, and no cast shadow. Navigation glass mixes the soft surface at (72%) with transparency; controls mix the field surface at (86%). Both inherit their active theme. The shared blur is (20px), reduced to (12px) in rétro. The reading plane stays opaque.
+Resting surfaces are flat and separated by tone only: no shadow and no blur. Overlays (settings, dialogs, emoji panel, toasts) share the soft `--overlay-shadow`. The photo viewer is a near-black full-screen lightbox in every theme.
 
-### Shadow Vocabulary
-
-- **Overlay:** `var(--overlay-shadow)` gives settings, dialogs, emoji panels, and toasts the same soft lifted treatment. Light, dark, and rétro each supply their recorded theme value; the sidecar preserves the literal shadow definitions.
-
-Reduced transparency replaces glass with solid soft-surface and field colors and removes their shared blur. Color and border transitions use (160ms ease-out) under `prefers-reduced-motion: no-preference`; there is no entrance choreography. Keep overlay state feedback restrained and preserve visible keyboard focus.
-
-**The Quiet Depth Rule.** Use tonal separation for resting panels; reserve the shared soft shadow for overlays and feedback.
+**The Flat Field Rule.** Depth on resting surfaces comes from tone, never from shadows, glass or gradients.
 
 ## Shapes
 
-The shared surface radius is (16px) in light and dark, and square (0px) in rétro. The compact radius step is (8px); small checkbox corners derive from the shared radius divided by three. Standard buttons, fields, panels, bubbles, and overlays share this geometry rather than inventing separate silhouettes.
-
-Avatars and the send action are circles in light and dark, square in rétro. Unread counters remain round badges. Thin (1px) lines group content and frame fields; they do not outline every message or resting panel. Lucide outline icons use consistent strokes (1.7), typically (18–24px); the send mark is the shipped custom filled SVG.
+All three themes share the same geometry: 20px panels and dialogs, 16px bubbles, 14px rows and photo tiles, 12px fields, pill buttons, toasts and composer, circular avatars, icon buttons and send. Checkboxes use 6px corners. Lucide outline icons use a 1.75 stroke; the send mark is the filled custom arrow.
 
 ## Components
 
 ### Buttons
 
-Quiet, consistent actions share medium-weight labels, a minimum (44px) height, (8px 12px) padding, and theme-derived corners. Secondary is the default: surface fill and divider border. Primary uses green and its paired text color; danger uses surface fill, danger text, and a danger border; ghost removes the visible border and fill. Secondary, danger, and ghost hover on pale green; primary hover uses (.9) opacity. Disabled shared buttons use (.5) opacity and block pointer events. The send action intentionally retains its full opacity when disabled.
-
-Visible focus uses theme focus ink, with a global (2px) outline and (3px) offset; shared buttons apply a (3px) outline and (2px) offset. Icon controls preserve (44px) targets even when their marks are smaller.
+Shared buttons are pills with a minimum 44px height and medium-weight labels. Secondary is the default. Primary uses the action colour; danger uses danger text and border; ghost has no fill. Hover uses the selection tone; disabled buttons drop to 50% opacity, except send. Icon buttons are 44px circles (40px inside the composer, 38px on phones).
 
 ### Inputs / Fields
 
-Fields use the theme field surface, divider border, shared radius, and (8px 12px) padding. Inputs and native selects have minimum (44px) height. Labels sit above fields with (8px) gaps. Muted placeholders remain fully opaque; caret and focus use the theme accent. Checkbox labels provide the full (44px) target around a (20px) control.
+Fields use the input surface, a 1px line border, 12px corners and the reading font. Checkboxes are 20px with a 44px label target; checked fills with the ink colour.
 
 ### Navigation
 
-Contact rows are broad, quiet buttons: minimum (84px), (14px 16px) padding, a (56px) avatar, and (16px) spacing. Selected rows use pale green. Names, explicit session state, unread badges, and pending-photo labels share a predictable hierarchy. A status dot supplements text; it never replaces it. The desktop avatar rail retains accessible contact labels, state, pending-photo information, unread count, and hover titles while hiding the visible copy. Its selected state and unread badge stay visible. Blocked identities use a (44px) Lucide ShieldCheck action in the rail, labeled “Sblocca”; expanded navigation keeps the text label. The collapse toggle is desktop-only; mobile displays one conversation at a time.
+Contact rows are 60px desktop and 64px phone, with 40/44px field-coloured avatars, a single-line name and status, and an unread pill on the right. Selection fills the row with the selection tone. Offline and reactivation-required rows dim their avatar to 45%. Intents and blocked identities use a dashed empty avatar.
 
-### Badges
+### Conversation band
 
-Unread counts use a round (24px) badge with primary fill and paired contrast text. Status indicators are (8px) dots beside state labels. Keep their meanings tied to real runtime state.
+The signature component: the open Conversazione's header is filled with the Contatto's field and set in its ink. The avatar inverts (ink fill, field letter). Riattiva becomes an outlined pill in the band's ink.
 
-### Cards / Containers
+### Composer
 
-Identity creation uses a translucent control surface without a cast shadow. Settings use the same material with (24px) padding and a shared overlay shadow, at most (360px) wide. Dialogs use the opaque surface, matching corners, explicit titles and descriptions, and grouped actions. Theme, ID, version, and ethos-adamas belong in settings, including before identity creation. The persistent local identity footer shows nickname, relay state, and copy action. Global settings use the Lucide gear with the label and title “Impostazioni Tacitus”. Contact settings use Lucide Ellipsis, the title “Opzioni di [nickname]”, and the accessible label “Impostazioni del Contatto”. These distinct marks separate application preferences from contact actions.
+A pill holding photo, emoji and the auto-growing textarea (44–144px), with the 52px circular send beside it (44px on phones). Focus anywhere outlines the whole group. The placeholder never wraps.
 
-### Conversation and composer
+### Photos
 
-Incoming messages align left and outgoing messages right. Bubble tones distinguish direction without adding ornament. Show one timestamp only on the last message in each consecutive run of the same direction, including albums; its alignment follows that direction. Content wraps and preserves message line breaks.
-
-The composer groups photos, emoji, text, and send into one outlined glass control. Focus anywhere inside the group highlights its entire perimeter with the theme focus color (2px outline, 2px offset); the textarea has no separate focus outline. Text automatically grows from (48px) to (144px), then scrolls internally rather than resizing manually. Desktop has an (80px) minimum group height, (16px) space above it, and a small divider before the text area. Mobile lowers the group minimum to (68px), uses (12px) space above it, and removes that divider. Photo and emoji controls are adjacent siblings of the textarea within the same focus group. The filled send mark sits in a (54px) circle desktop and a (44px) target mobile; rétro changes that shape to square.
-
-### Photos, emoji, and feedback
-
-Photo previews reuse shared controls and corners: (96px) square thumbnails, compact gaps, explicit consent and transfer status, and a two-column conversation gallery. The photo viewer retains the shared theme surface, corners, and control vocabulary. Its dialog has (24px) viewport margins desktop, a maximum width of (1280px), and (16px) inner padding; mobile uses (8px) margins and padding. The header provides the only close action, beside the accessible photo title. The photo starts centered and fitted without enlarging beyond its natural dimensions; zoom bounds use the photo’s natural width and height, with the fitted view shown as (100%) and zoom capped at four times that fit.
-
-A compact glass toolbar has (8px) padding and (4px) gaps: Lucide minus/plus zoom actions, percentage, reset, and download. Controls retain (44px) minimum targets. Mobile download shows just its labeled icon in a (44px) control. A single visible help line explains pointer, touch, and keyboard zoom; the modal description remains available to assistive technology. The viewport and toolbar inherit all three themes, and reduced transparency makes the toolbar solid and removes its blur. Zoom and pan do not animate.
-
-Emoji panels use an opaque surface and the overlay shadow; selection uses pale green. Error and success feedback uses compact, centered toasts with explicit text and a shared overlay shadow. Error dismissal retains an accessible icon target.
+Album tiles are a two-column grid of 4:3 tiles with 14px corners; a single photo keeps its own aspect up to 320px. The viewer is a full-screen lightbox showing only a counter, download and close. Ctrl+wheel or pinch zooms; the plain wheel, arrows and swipe browse every photo in the Conversazione.
 
 ## Do's and Don'ts
 
 ### Do:
 
-- **Do** reuse the shared button, field, dialog, and settings patterns across identity, contacts, conversations, and photos.
-- **Do** use semantic theme variables so light, dark, and rétro preserve their distinct palettes.
-- **Do** keep message content and the reading plane legible above transparency effects.
-- **Do** preserve 44px minimum control targets and the visible focus treatment.
-- **Do** highlight the entire composer when any of its controls has focus.
-- **Do** preserve accessible contact names and states when navigation becomes an avatar rail.
-- **Do** respect reduced motion, reduced transparency, safe areas, and the visual viewport when the mobile keyboard opens.
-- **Do** keep consent, offline states, errors, and destructive actions explicit in text.
+- **Do** give each Contatto its field through `data-field={contactField(id)}`, never a hard-coded colour.
+- **Do** keep red/amber for send, primary actions and unread only.
+- **Do** keep 44px targets, visible focus, safe areas and the visual-viewport behaviour.
+- **Do** keep consent, offline states, errors and destructive actions explicit in text; a dot never replaces its label.
+- **Do** scale every interface-voice size by `var(--ui)` so rétro stays legible.
 
 ### Don't:
 
-- **Don't** add decorative motifs or extra visual hierarchy that competes with message reading.
-- **Don't** turn the whole interface into black and green; light, dark, and rétro have separate palette roles.
-- **Don't** apply the pixel font to messages or composer text.
-- **Don't** use a permanent technical identity strip above the conversation; keep IDs and technical details in settings.
-- **Don't** infer secure-session readiness, delivery, or last activity from decorative indicators.
+- **Don't** add shadows, glass, gradients or side stripes to resting surfaces.
+- **Don't** use contact fields for anything but people.
+- **Don't** set messages or the composer in VT323.
+- **Don't** let the document scroll; scroll the history and list only.
+- **Don't** infer secure-session readiness, delivery or last activity from decorative indicators.

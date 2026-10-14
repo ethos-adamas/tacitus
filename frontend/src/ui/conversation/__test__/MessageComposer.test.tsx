@@ -193,3 +193,41 @@ it('mostra il progresso nel gruppo annullabile del trasferimento', () => {
   expect(screen.getByRole('status').className).toContain('album-progress');
   expect(transfers.annullaAlbum).toHaveBeenCalledWith(tacitusId);
 });
+
+it('mette la foto a sinistra del testo e le emoji dentro il compositore, solo con icone (#15, #26)', () => {
+  // Given
+  render(
+    <Provider store={createTestStore()}>
+      <MessageComposer
+        tacitusId={tacitusId}
+        value=""
+        theme="light"
+        disabled={false}
+        placeholder="Scrivi"
+        maxLength={100}
+        onChange={vi.fn()}
+        onSend={vi.fn()}
+      />
+    </Provider>,
+  );
+
+  // When
+  const composer = document.querySelector('.composer')!;
+  const controls = Array.from(
+    composer.querySelectorAll('button, textarea'),
+  ).map(
+    control =>
+      control.getAttribute('aria-label') ?? control.textContent?.trim(),
+  );
+
+  // Then
+  expect(controls).toEqual([
+    'Aggiungi foto',
+    'Choose an emoji',
+    'Messaggio',
+    'Invia',
+  ]);
+  const addPhoto = screen.getByRole('button', { name: 'Aggiungi foto' });
+  expect(addPhoto.textContent).toBe('');
+  expect(addPhoto.querySelector('svg')).not.toBeNull();
+});
