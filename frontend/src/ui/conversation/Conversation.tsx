@@ -12,6 +12,7 @@ import type { Conversazione as ConversazioneModel } from '../../domain/conversaz
 import { MAX_MESSAGE_LENGTH, type Messaggio } from '../../domain/messaggi';
 import type { Contatto, Relazione } from '../../domain/relazioni';
 import ContactSettingsDialog from '../contacts/ContactSettingsDialog';
+import { contactField } from '../contacts/contactField';
 import { Button } from '../kit/Button';
 import PhotoViewer, { type Photo } from '../kit/PhotoViewer';
 import MessageComposer from './MessageComposer';
@@ -143,7 +144,9 @@ const ConversationContent = ({
 
   return (
     <>
-      <div className="conversation-title">
+      <div
+        className="conversation-title"
+        data-field={contactField(contact.tacitusId)}>
         <Button
           variant="ghost"
           className="back icon-button"

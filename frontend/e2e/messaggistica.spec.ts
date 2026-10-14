@@ -92,6 +92,22 @@ const settleLayout = async (page: Page) => {
   });
 };
 
+// On phones app settings live in the list: leave the open Conversazione first, return with the callback.
+const openSettings = async (page: Page) => {
+  const back = page.getByRole('button', { name: 'Torna alle Conversazioni' });
+  const title = (await back.isVisible())
+    ? await page.locator('.conversation-title h2').innerText()
+    : undefined;
+  if (title) await back.click();
+  await page.getByLabel('Impostazioni Tacitus', { exact: true }).click();
+  return async () => {
+    if (title)
+      await page
+        .getByRole('button', { name: new RegExp(`^${title},`) })
+        .click();
+  };
+};
+
 const createPng = async (page: Page, color: string, size = 32, height = size) =>
   page.evaluate(
     ({ color: fill, size: side, height }) => {
@@ -707,10 +723,7 @@ test('Regressione UI #23: font e preferenze coerenti', async ({ browser }) => {
   await settleLayout(page);
 
   // When / Then: the landing settings use the same UI font
-  await expect(page.getByLabel('Tema')).toHaveCSS(
-    'font-family',
-    /Press Start 2P/,
-  );
+  await expect(page.getByLabel('Tema')).toHaveCSS('font-family', /VT323/);
   await page.keyboard.press('Escape');
   await page.getByLabel('Nickname immutabile').fill('alice_ui23');
   await page.getByRole('button', { name: 'Crea Identità' }).click();
@@ -730,9 +743,7 @@ test('Regressione UI #23: font e preferenze coerenti', async ({ browser }) => {
   await expect(alice.page.getByText('testo leggibile')).toBeVisible();
 
   for (const theme of ['retro', 'light', 'dark', 'retro']) {
-    await alice.page
-      .getByLabel('Impostazioni Tacitus', { exact: true })
-      .click();
+    const returnToConversation = await openSettings(alice.page);
     await alice.page.getByLabel('Tema').selectOption(theme);
     await settleLayout(alice.page);
     const fonts = await alice.page.evaluate(() => {
@@ -743,16 +754,12 @@ test('Regressione UI #23: font e preferenze coerenti', async ({ browser }) => {
         ),
       ];
       const heading = document.querySelector('.settings-heading')!;
-      const message = document.querySelector('.message p')!;
-      const textarea = document.querySelector('.message-input textarea')!;
       const option = select.querySelector('option')!;
       return {
         select: getComputedStyle(select).fontFamily,
         option: getComputedStyle(option).fontFamily,
         labels: checkboxLabels.map(label => getComputedStyle(label).fontFamily),
         heading: getComputedStyle(heading).fontFamily,
-        message: getComputedStyle(message).fontFamily,
-        textarea: getComputedStyle(textarea).fontFamily,
         overflow: document.documentElement.scrollWidth <= innerWidth,
         checkboxHeight: document
           .querySelector('.settings-content .checkbox-field')!
@@ -776,21 +783,27 @@ test('Regressione UI #23: font e preferenze coerenti', async ({ browser }) => {
       };
     });
     if (theme === 'retro') {
-      expect(fonts.select).toContain('Press Start 2P');
-      expect(fonts.option).toContain('Press Start 2P');
-      expect(fonts.heading).toContain('Press Start 2P');
-      expect(fonts.labels.every(font => font.includes('Press Start 2P'))).toBe(
-        true,
-      );
+      expect(fonts.select).toContain('VT323');
+      expect(fonts.option).toContain('VT323');
+      expect(fonts.heading).toContain('VT323');
+      expect(fonts.labels.every(font => font.includes('VT323'))).toBe(true);
     } else {
-      expect(fonts.select).not.toContain('Press Start 2P');
+      expect(fonts.select).not.toContain('VT323');
     }
-    expect(fonts.message).not.toContain('Press Start 2P');
-    expect(fonts.textarea).not.toContain('Press Start 2P');
     expect(fonts.overflow).toBe(true);
     expect(fonts.checkboxHeight).toBeGreaterThanOrEqual(44);
     expect(fonts.checkboxMisalignment).toBeLessThanOrEqual(1.5);
     await alice.page.keyboard.press('Escape');
+    await returnToConversation();
+    // The Two Voices Rule: messages and composer never take the rétro interface voice.
+    await expect(alice.page.locator('.message p').first()).not.toHaveCSS(
+      'font-family',
+      /VT323/,
+    );
+    await expect(alice.page.getByLabel('Messaggio')).not.toHaveCSS(
+      'font-family',
+      /VT323/,
+    );
   }
   await closePersonas(alice, bob);
 });
@@ -827,8 +840,9 @@ test('Regressione UI: il compositore mantiene testo, focus e spazio durante il r
   await matchContacts(alice, bob);
   await alice.page.getByRole('button', { name: /bob_composer/ }).click();
 
-  // When / Then
+  // When / Then: settings live in the list header, visible at desktop width
   for (const theme of ['light', 'dark', 'retro']) {
+    await alice.page.setViewportSize({ width: 1280, height: 800 });
     await alice.page
       .getByLabel('Impostazioni Tacitus', { exact: true })
       .click();
@@ -946,7 +960,7 @@ test('Regressione UI: Contatti riducibili, impostazioni distinte e timestamp per
     const sidebar = await alice.page
       .getByRole('complementary', { name: 'Conversazioni' })
       .boundingBox();
-    expect(sidebar!.width).toBe(88);
+    expect(sidebar!.width).toBe(76);
     await expect(
       alice.page.getByRole('button', { name: /bob_catene/ }),
     ).toBeVisible();
@@ -1074,7 +1088,7 @@ test('su mobile dopo invio e ridimensionamento scorre solo la cronologia', async
     const bounds = await alice.page.locator('.composer').boundingBox();
     expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(height);
     expect(await alice.page.evaluate(() => window.scrollY)).toBe(0);
-    await expect(alice.page.locator('header .brand')).toBeVisible();
+    await expect(alice.page.locator('.conversation-title')).toBeInViewport();
   }
   // Then: the document never scrolls or rubber-bands under the fixed shell (iOS inverted scroll).
   const scrolling = await alice.page.evaluate(() => {
@@ -1336,9 +1350,10 @@ test('Album: consenso iniziale, accettazione successiva, persistenza e revoca', 
     .click();
   await bob.page.getByLabel('Foto da questo Contatto').selectOption('allow');
   await bob.page.getByRole('button', { name: 'Chiudi' }).last().click();
-  await bob.page.getByLabel('Impostazioni Tacitus', { exact: true }).click();
+  const returnToAlice = await openSettings(bob.page);
   await bob.page.getByText('Ricevi foto e album', { exact: true }).click();
   await bob.page.getByLabel('Impostazioni Tacitus', { exact: true }).click();
+  await returnToAlice();
   await alice.page.getByLabel('Scegli foto').setInputFiles(files.slice(0, 1));
   await alice.page.getByRole('button', { name: 'Invia album' }).click();
   await expect(

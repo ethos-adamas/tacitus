@@ -20,6 +20,7 @@ import type { StatoContatto } from '../../domain/relazioni';
 import type { TacitusId } from '../../domain/tacitusId';
 import { Button } from '../kit/Button';
 import AddContactDialog from './AddContactDialog';
+import { contactField } from './contactField';
 
 const statusLabel: Record<StatoContatto, string> = {
   'in-attesa': 'In attesa del Contatto',
@@ -84,7 +85,10 @@ const ConversationRow = ({
       aria-label={`${nickname}, ${statusLabel[stato]}${fotoInAttesa ? ', Foto da accettare' : ''}${nonLetti > 0 ? `, ${nonLetti} non letti` : ''}`}
       title={`${nickname} · ${statusLabel[stato]}`}
       onClick={select}>
-      <span className="avatar" aria-hidden="true">
+      <span
+        className="avatar"
+        data-field={contactField(tacitusId)}
+        aria-hidden="true">
         {nickname[0].toUpperCase()}
       </span>
       <span>
