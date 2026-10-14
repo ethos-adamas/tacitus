@@ -757,6 +757,22 @@ test('Regressione UI #23: font e preferenze coerenti', async ({ browser }) => {
         checkboxHeight: document
           .querySelector('.settings-content .checkbox-field')!
           .getBoundingClientRect().height,
+        // #17: every checkbox shares the vertical center of its label.
+        checkboxMisalignment: Math.max(
+          ...[
+            ...document.querySelectorAll('.settings-content .checkbox-field'),
+          ].map(field => {
+            const box = field
+              .querySelector('.checkbox-control')!
+              .getBoundingClientRect();
+            const label = field
+              .querySelector(':scope > span')!
+              .getBoundingClientRect();
+            return Math.abs(
+              box.top + box.height / 2 - (label.top + label.height / 2),
+            );
+          }),
+        ),
       };
     });
     if (theme === 'retro') {
@@ -773,6 +789,7 @@ test('Regressione UI #23: font e preferenze coerenti', async ({ browser }) => {
     expect(fonts.textarea).not.toContain('Press Start 2P');
     expect(fonts.overflow).toBe(true);
     expect(fonts.checkboxHeight).toBeGreaterThanOrEqual(44);
+    expect(fonts.checkboxMisalignment).toBeLessThanOrEqual(1.5);
     await alice.page.keyboard.press('Escape');
   }
   await closePersonas(alice, bob);
