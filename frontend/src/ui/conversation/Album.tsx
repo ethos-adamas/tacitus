@@ -11,17 +11,42 @@ import { useDispatch, useSelector } from '../../application/store/hooks';
 import { MAX_IMAGES } from '../../infrastructure/album/album';
 import { leggiIdentitaLocale } from '../../infrastructure/identity/identitaLocaleCorrente';
 import { loadAlbum } from '../../infrastructure/persistence/localPersistence';
-import PhotoViewer from '../kit/PhotoViewer';
 import { SelectField } from '../kit/Fields';
 import { Button } from '../kit/Button';
 
-export const AlbumGallery = ({
-  tacitusId,
-  id,
-}: {
+type AlbumThumbnailProps = {
+  src: string;
+  index: number;
+  onOpen: (index: number) => void;
+};
+
+const AlbumThumbnail = ({ index, onOpen, src }: AlbumThumbnailProps) => {
+  const open = () => onOpen(index);
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      className="album-photo"
+      aria-label={`Apri Foto ${index + 1}`}
+      onClick={open}>
+      <img src={src} alt={`Foto ${index + 1}`} loading="lazy" />
+    </Button>
+  );
+};
+
+type AlbumGalleryProps = {
   tacitusId: TacitusId;
   id: string;
-}) => {
+  onLoaded: (id: string, images: readonly string[]) => void;
+  onOpen: (id: string, index: number) => void;
+};
+
+export const AlbumGallery = ({
+  id,
+  onLoaded,
+  onOpen,
+  tacitusId,
+}: AlbumGalleryProps) => {
   const [images, setImages] = useState<string[]>([]);
   const [error, setError] = useState('');
   useEffect(() => {
@@ -30,7 +55,9 @@ export const AlbumGallery = ({
     setError('');
     void loadAlbum(leggiIdentitaLocale(), tacitusId, id)
       .then(value => {
-        if (active) setImages(value);
+        if (!active) return;
+        setImages(value);
+        onLoaded(id, value);
       })
       .catch(() => {
         if (active) setError('Foto locali non disponibili.');
@@ -38,16 +65,17 @@ export const AlbumGallery = ({
     return () => {
       active = false;
     };
-  }, [tacitusId, id]);
+  }, [tacitusId, id, onLoaded]);
+  const openPhoto = (index: number) => onOpen(id, index);
   return (
     <div className="album-gallery">
       {error && <p role="alert">{error}</p>}
       {images.map((src, index) => (
-        <PhotoViewer
+        <AlbumThumbnail
           key={`${tacitusId}-${id}-${index}`}
           src={src}
-          alt={`Foto ${index + 1}`}
-          downloadName={`foto-${index + 1}.webp`}
+          index={index}
+          onOpen={openPhoto}
         />
       ))}
     </div>

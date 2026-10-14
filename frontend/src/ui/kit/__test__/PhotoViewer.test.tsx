@@ -1,147 +1,168 @@
 import {
   cleanup,
+  createEvent,
   fireEvent,
   render,
   screen,
-  waitFor,
 } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
-import PhotoViewer, { calculateFit } from '../PhotoViewer';
+import { useState } from 'react';
+import { afterEach, expect, it } from 'vitest';
+import PhotoViewer, { type Photo } from '../PhotoViewer';
 
-afterEach(() => {
-  cleanup();
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
-});
+afterEach(cleanup);
 
-it('calcola il fit orizzontale e il limite massimo quattro volte', () => {
-  // Given
-  const fit = calculateFit(500, 400, 2000, 1000);
+const photos: readonly Photo[] = [
+  {
+    src: 'data:image/webp;base64,AAAA',
+    alt: 'Foto 1',
+    downloadName: 'foto-1.webp',
+  },
+  {
+    src: 'data:image/webp;base64,BBBB',
+    alt: 'Foto 2',
+    downloadName: 'foto-2.webp',
+  },
+  {
+    src: 'data:image/webp;base64,CCCC',
+    alt: 'Foto 3',
+    downloadName: 'foto-3.webp',
+  },
+];
 
-  // When / Then
-  expect(fit).toEqual({ fit: 0.25, x: 0, y: 75 });
-  expect(fit && fit.fit * 4).toBe(1);
-});
-
-it('calcola il fit verticale e centra una foto piccola senza ingrandirla', () => {
-  // Given / When
-  const vertical = calculateFit(500, 400, 1000, 2000);
-  const small = calculateFit(500, 400, 200, 100);
-
-  // Then
-  expect(vertical).toEqual({ fit: 0.2, x: 150, y: 0 });
-  expect(small).toEqual({ fit: 1, x: 150, y: 150 });
-  expect(calculateFit(0, 400, 200, 100)).toBeUndefined();
-});
-
-it('apre senza download automatico e offre il download soltanto nella modale', () => {
-  // Given
-  render(
+const Harness = ({ initial }: { initial: number | undefined }) => {
+  const [index, setIndex] = useState(initial);
+  const close = () => setIndex(undefined);
+  return (
     <PhotoViewer
-      src="data:image/webp;base64,AAAA"
-      alt="Foto 1"
-      downloadName="foto-1.webp"
-    />,
+      photos={photos}
+      index={index}
+      onIndexChange={setIndex}
+      onClose={close}
+    />
   );
+};
 
-  // When
-  fireEvent.click(screen.getByRole('button', { name: 'Apri Foto 1' }));
+const wheel = (
+  target: Element,
+  init: { deltaY: number; ctrlKey?: boolean },
+  timeStamp: number,
+) => {
+  const event = createEvent.wheel(target, init);
+  Object.defineProperty(event, 'timeStamp', { value: timeStamp });
+  fireEvent(target, event);
+};
+
+const shownPhoto = () =>
+  screen.getByRole('dialog').querySelector('img')?.getAttribute('alt');
+
+it('mostra soltanto foto, contatore, download e chiusura senza istruzioni', () => {
+  // Given / When
+  render(<Harness initial={0} />);
 
   // Then
-  expect(screen.getByRole('dialog')).toBeDefined();
+  expect(shownPhoto()).toBe('Foto 1');
+  expect(screen.getByText('1 / 3')).toBeDefined();
   const download = screen.getByRole('link', { name: 'Scarica foto' });
   expect(download.getAttribute('download')).toBe('foto-1.webp');
-  expect(screen.queryByRole('link', { name: 'Apri Foto 1' })).toBeNull();
+  expect(screen.getAllByRole('button')).toHaveLength(1);
+  expect(screen.getByRole('button', { name: 'Chiudi' })).toBeDefined();
+  expect(screen.queryByText(/rotellina/i, { ignore: '.sr-only' })).toBeNull();
 });
 
-it('mantiene disponibile la chiusura quando la foto non è decodificabile', () => {
+it('la rotellina senza Ctrl scorre la galleria, con Ctrl resta allo zoom', () => {
   // Given
-  render(
-    <PhotoViewer
-      src="data:image/webp;base64,AAAA"
-      alt="Foto 1"
-      downloadName="foto-1.webp"
-    />,
-  );
-  fireEvent.click(screen.getByRole('button', { name: 'Apri Foto 1' }));
+  render(<Harness initial={0} />);
+  const dialog = screen.getByRole('dialog');
 
   // When
-  fireEvent.error(document.querySelector('.photo-viewer-preload')!);
+  wheel(dialog, { deltaY: 100 }, 1_000);
+
+  // Then
+  expect(shownPhoto()).toBe('Foto 2');
+
+  // When: the rest of the same gesture and a Ctrl+wheel zoom
+  wheel(dialog, { deltaY: 100 }, 1_050);
+  wheel(dialog, { deltaY: 100, ctrlKey: true }, 2_000);
+
+  // Then
+  expect(shownPhoto()).toBe('Foto 2');
+
+  // When: a new gesture upwards
+  wheel(dialog, { deltaY: -100 }, 3_000);
+
+  // Then
+  expect(shownPhoto()).toBe('Foto 1');
+});
+
+it('le frecce scorrono la galleria senza oltrepassarne i limiti', () => {
+  // Given
+  render(<Harness initial={2} />);
+  const dialog = screen.getByRole('dialog');
+
+  // When
+  fireEvent.keyDown(dialog, { key: 'ArrowRight' });
+
+  // Then
+  expect(shownPhoto()).toBe('Foto 3');
+
+  // When
+  fireEvent.keyDown(dialog, { key: 'ArrowLeft' });
+
+  // Then
+  expect(shownPhoto()).toBe('Foto 2');
+});
+
+it('lo scorrimento orizzontale con un dito cambia foto su mobile', () => {
+  // Given
+  render(<Harness initial={0} />);
+  const stage = screen
+    .getByRole('dialog')
+    .querySelector('.photo-viewer-stage')!;
+
+  // When
+  const start = [{ clientX: 300, clientY: 400 }];
+  const end = [{ clientX: 150, clientY: 410 }];
+  fireEvent.touchStart(stage, { touches: start, changedTouches: start });
+  fireEvent.touchEnd(stage, { touches: [], changedTouches: end });
+
+  // Then
+  expect(shownPhoto()).toBe('Foto 2');
+});
+
+it('chiude con il pulsante e cliccando fuori dalla foto', () => {
+  // Given
+  const { unmount } = render(<Harness initial={0} />);
+
+  // When
+  fireEvent.click(screen.getByRole('button', { name: 'Chiudi' }));
+
+  // Then
+  expect(screen.queryByRole('dialog')).toBeNull();
+  unmount();
+
+  // Given
+  render(<Harness initial={0} />);
+
+  // When
+  fireEvent.click(
+    screen.getByRole('dialog').querySelector('.photo-viewer-stage')!,
+  );
+
+  // Then
+  expect(screen.queryByRole('dialog')).toBeNull();
+});
+
+it('mantiene la chiusura disponibile quando la foto non è decodificabile', () => {
+  // Given
+  render(<Harness initial={0} />);
+
+  // When
+  fireEvent.error(screen.getByRole('dialog').querySelector('img')!);
 
   // Then
   expect(screen.getByRole('alert').textContent).toContain(
     'Impossibile visualizzare questa foto.',
   );
-  fireEvent.click(screen.getAllByRole('button', { name: 'Chiudi' }).at(-1)!);
+  fireEvent.click(screen.getByRole('button', { name: 'Chiudi' }));
   expect(screen.queryByRole('dialog')).toBeNull();
-});
-
-it('collega un aiuto tastiera visibile con un ID distinto per ogni viewer', async () => {
-  // Given
-  vi.stubGlobal(
-    'ResizeObserver',
-    class {
-      observe() {}
-      disconnect() {}
-    },
-  );
-  const originalRect = HTMLElement.prototype.getBoundingClientRect;
-  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
-    function (this: HTMLElement) {
-      if (this.classList.contains('photo-viewer-stage'))
-        return {
-          width: 500,
-          height: 400,
-          top: 0,
-          left: 0,
-          right: 500,
-          bottom: 400,
-          x: 0,
-          y: 0,
-          toJSON: () => ({}),
-        } as DOMRect;
-      return originalRect.call(this);
-    },
-  );
-  render(
-    <>
-      <PhotoViewer
-        src="data:image/webp;base64,AAAA"
-        alt="Foto 1"
-        downloadName="foto-1.webp"
-      />
-      <PhotoViewer
-        src="data:image/webp;base64,BBBB"
-        alt="Foto 2"
-        downloadName="foto-2.webp"
-      />
-    </>,
-  );
-
-  // When
-  for (const trigger of screen.getAllByRole('button', {
-    name: /^Apri Foto [12]$/,
-  }))
-    fireEvent.click(trigger);
-  const preloads = Array.from(
-    document.querySelectorAll<HTMLImageElement>('.photo-viewer-preload'),
-  );
-  for (const preload of preloads) {
-    Object.defineProperties(preload, {
-      naturalWidth: { configurable: true, value: 1000 },
-      naturalHeight: { configurable: true, value: 800 },
-    });
-    fireEvent.load(preload);
-  }
-
-  // Then
-  await waitFor(() =>
-    expect(screen.getAllByLabelText('Foto ingrandita')).toHaveLength(2),
-  );
-  const helpIds = screen
-    .getAllByText(/Rotellina o due dita per lo zoom/)
-    .map(element => element.id);
-  expect(new Set(helpIds).size).toBe(2);
-  for (const wrapper of screen.getAllByLabelText('Foto ingrandita'))
-    expect(helpIds).toContain(wrapper.getAttribute('aria-describedby'));
 });

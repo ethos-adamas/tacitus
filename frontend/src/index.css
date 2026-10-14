@@ -300,25 +300,21 @@ input, select { min-height: 44px; }
 .album-consent, .album-progress { display: grid; min-width: 0; gap: 8px; }
 .album-consent p, .album-consent small, .album-progress p { margin: 0; }
 .album-consent small { color: var(--muted); line-height: 1.5; }
-.modal-image { width: min(1280px, calc(100vw - 48px)) !important; height: calc(100dvh - 48px); max-height: none; grid-template-rows: auto minmax(0, 1fr); gap: 12px; padding: 16px; overflow: hidden; }
-.modal-image .modal-description { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-.modal-image .modal-body { min-height: 0; padding: 0; }
-.photo-viewer { height: 100%; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 12px; }
-.photo-viewer-stage { min-width: 0; min-height: 0; position: relative; overflow: hidden; display: grid; place-items: center; }
-.photo-viewer-preload { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
-.photo-viewer-zoom-area { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; touch-action: none; }
-.photo-viewer-image { display: block; max-width: none; user-select: none; }
-.photo-viewer-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px; padding: 8px; border-radius: var(--radius); background: var(--glass-control); backdrop-filter: blur(var(--blur)); }
-.photo-viewer-keyboard-help { order: 1; flex: 1 0 100%; margin: 4px 0 0; color: var(--muted); font: .8rem/1.5 var(--font-reading); text-align: center; }
-.photo-viewer-toolbar output { min-width: 48px; text-align: center; font-family: var(--font-reading); }
-.photo-viewer-error { margin: auto; color: var(--danger); }
+/* The photo viewer is a full-screen lightbox: CSS centers and fits the photo, zoom only scales it. */
+.photo-viewer-backdrop { position: fixed; inset: 0; z-index: 50; background: #000000eb; }
+.photo-viewer[role='dialog'] { position: fixed; inset: 0; z-index: 50; border-radius: 0; box-shadow: none; color: #fff; outline: none; }
+.photo-viewer-stage { position: absolute; inset: 0; display: grid; place-items: center; }
+.photo-viewer-zoom-area, .photo-viewer-zoom-content { width: 100% !important; height: 100% !important; }
+.photo-viewer-zoom-area { touch-action: none; }
+.photo-viewer-zoom-content { display: flex; align-items: center; justify-content: center; padding: max(64px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
+.photo-viewer-image { display: block; max-width: 100%; max-height: 100%; object-fit: contain; user-select: none; }
+.photo-viewer-bar { position: absolute; top: max(8px, env(safe-area-inset-top)); right: 8px; display: flex; align-items: center; gap: 4px; }
+.photo-viewer-count { margin-inline-end: 8px; color: #ffffffb3; font: .875rem/1 var(--font-reading); font-variant-numeric: tabular-nums; }
+.photo-viewer-action { width: 44px; min-width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: var(--radius); background: transparent; color: #ffffffd9; }
+.photo-viewer-action:hover { background: #ffffff1f; color: #fff; }
+.photo-viewer-action:focus-visible { outline-color: #fff; }
+.photo-viewer-error { color: #fff; font-family: var(--font-reading); }
 .unblock-icon { display: none; }
-
-@media (max-width: 720px) {
-  .modal-image { width: calc(100vw - 16px) !important; height: calc(100dvh - 16px); padding: 8px; }
-  .photo-viewer-toolbar .download-link { width: 44px; padding: 0; }
-  .photo-viewer-toolbar .download-link span { display: none; }
-}
 
 :root[data-theme='retro'] .brand strong { font-size: 16px; letter-spacing: 0; }
 :root[data-theme='retro'] .panel-title h1 { font-size: .75rem; line-height: 1.8; }

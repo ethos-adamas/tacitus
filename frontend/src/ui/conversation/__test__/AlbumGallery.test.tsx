@@ -23,21 +23,42 @@ afterEach(() => {
 });
 
 const tacitusId = parseTacitusId('2G2DX-6P175-0PJ6E-Q37T0-Q94YJC');
+const onLoaded = vi.fn();
+const onOpen = vi.fn();
 
-it('mostra miniature apribili senza un link di download implicito', async () => {
+afterEach(() => {
+  onLoaded.mockReset();
+  onOpen.mockReset();
+});
+
+it('apre la foto scelta senza un link di download implicito', async () => {
   // Given
-  loadAlbum.mockResolvedValue(['data:image/webp;base64,AAAA']);
-  render(<AlbumGallery tacitusId={tacitusId} id="album-1" />);
+  loadAlbum.mockResolvedValue([
+    'data:image/webp;base64,AAAA',
+    'data:image/webp;base64,BBBB',
+  ]);
+  render(
+    <AlbumGallery
+      tacitusId={tacitusId}
+      id="album-1"
+      onLoaded={onLoaded}
+      onOpen={onOpen}
+    />,
+  );
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Apri Foto 2' })).toBeDefined(),
+  );
 
   // When
-  await waitFor(() =>
-    expect(screen.getByRole('button', { name: 'Apri Foto 1' })).toBeDefined(),
-  );
+  fireEvent.click(screen.getByRole('button', { name: 'Apri Foto 2' }));
 
   // Then
   expect(screen.queryByRole('link')).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: 'Apri Foto 1' }));
-  expect(screen.getByRole('link', { name: 'Scarica foto' })).toBeDefined();
+  expect(onLoaded).toHaveBeenCalledWith('album-1', [
+    'data:image/webp;base64,AAAA',
+    'data:image/webp;base64,BBBB',
+  ]);
+  expect(onOpen).toHaveBeenCalledWith('album-1', 1);
 });
 
 it('ignora il risultato di un Album precedente quando cambia Contatto', async () => {
@@ -52,11 +73,23 @@ it('ignora il risultato di un Album precedente quando cambia Contatto', async ()
       () => new Promise(resolve => (resolveSecond = resolve)),
     );
   const { rerender } = render(
-    <AlbumGallery tacitusId={tacitusId} id="album-1" />,
+    <AlbumGallery
+      tacitusId={tacitusId}
+      id="album-1"
+      onLoaded={onLoaded}
+      onOpen={onOpen}
+    />,
   );
 
   // When
-  rerender(<AlbumGallery tacitusId={tacitusId} id="album-2" />);
+  rerender(
+    <AlbumGallery
+      tacitusId={tacitusId}
+      id="album-2"
+      onLoaded={onLoaded}
+      onOpen={onOpen}
+    />,
+  );
   await waitFor(() => expect(loadAlbum).toHaveBeenCalledTimes(2));
   resolveFirst?.(['data:image/webp;base64,old']);
   resolveSecond?.(['data:image/webp;base64,new']);
@@ -65,14 +98,24 @@ it('ignora il risultato di un Album precedente quando cambia Contatto', async ()
   await waitFor(() =>
     expect(screen.getByRole('button', { name: 'Apri Foto 1' })).toBeDefined(),
   );
-  expect(screen.getByRole('button', { name: 'Apri Foto 1' })).toBeDefined();
+  expect(onLoaded).toHaveBeenCalledTimes(1);
+  expect(onLoaded).toHaveBeenCalledWith('album-2', [
+    'data:image/webp;base64,new',
+  ]);
   expect(screen.queryByText('Foto locali non disponibili.')).toBeNull();
 });
 
 it('mostra un errore esplicito se il contenuto locale non è disponibile', async () => {
   // Given
   loadAlbum.mockRejectedValue(new Error('offline'));
-  render(<AlbumGallery tacitusId={tacitusId} id="album-1" />);
+  render(
+    <AlbumGallery
+      tacitusId={tacitusId}
+      id="album-1"
+      onLoaded={onLoaded}
+      onOpen={onOpen}
+    />,
+  );
 
   // When / Then
   expect((await screen.findByRole('alert')).textContent).toContain(

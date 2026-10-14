@@ -92,33 +92,6 @@ const settleLayout = async (page: Page) => {
   });
 };
 
-const waitForStableViewer = async (page: Page) => {
-  let previous = '';
-  let stableSamples = 0;
-  await expect
-    .poll(
-      async () => {
-        const current = await page
-          .locator('.photo-viewer-zoom-content')
-          .evaluate(element => {
-            const image = element.querySelector('img')!.getBoundingClientRect();
-            const matrix = new DOMMatrixReadOnly(
-              getComputedStyle(element).transform,
-            );
-            return `${matrix.a}:${matrix.e}:${matrix.f}:${image.width}:${image.height}`;
-          });
-        if (current === previous) stableSamples += 1;
-        else {
-          previous = current;
-          stableSamples = 0;
-        }
-        return stableSamples;
-      },
-      { timeout: 10_000 },
-    )
-    .toBeGreaterThanOrEqual(3);
-};
-
 const createPng = async (page: Page, color: string, size = 32, height = size) =>
   page.evaluate(
     ({ color: fill, size: side, height }) => {
@@ -1367,14 +1340,14 @@ test('Album: consenso iniziale, accettazione successiva, persistenza e revoca', 
   await closePersonas(alice, bob);
 });
 
-test('Regressione UI #19: tastiera zoom — Album: anteprima e download esplicito', async ({
+test('Regressione UI #19/#25: anteprima foto minimale, centrata e navigabile', async ({
   browser,
 }) => {
   test.skip(
     test.info().project.name !== 'chromium-desktop',
-    'Rotellina e pan sono verificati nel progetto desktop; il progetto mobile copre il pinch.',
+    'Rotellina e Ctrl+rotellina sono verificati su desktop; il progetto mobile copre il pinch.',
   );
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   // Given
   const alice = await createPersona(browser, 'alice_viewer');
   const bob = await createPersona(browser, 'bob_viewer');
@@ -1386,16 +1359,33 @@ test('Regressione UI #19: tastiera zoom — Album: anteprima e download esplicit
   await bob.page.getByLabel('Foto da questo Contatto').selectOption('allow');
   await bob.page.getByRole('button', { name: 'Chiudi' }).last().click();
   await alice.page.getByRole('button', { name: /bob_viewer/ }).click();
-  const png = await createPng(alice.page, '#2f8f67', 1200, 600);
-  await alice.page.getByLabel('Scegli foto').setInputFiles({
-    name: 'foto-viewer.png',
-    mimeType: 'image/png',
-    buffer: Buffer.from(png, 'base64'),
-  });
+  const files = [];
+  for (const [index, [color, width, height]] of (
+    [
+      ['#2f8f67', 1200, 600],
+      ['#8f2f5f', 600, 1200],
+    ] as const
+  ).entries())
+    files.push({
+      name: `foto-viewer-${index}.png`,
+      mimeType: 'image/png',
+      buffer: Buffer.from(
+        await createPng(alice.page, color, width, height),
+        'base64',
+      ),
+    });
+  await alice.page.getByLabel('Scegli foto').setInputFiles(files);
   await alice.page.getByRole('button', { name: 'Invia album' }).click();
-  await expect(alice.page.locator('.album-gallery img')).toHaveCount(1, {
+  await expect(alice.page.locator('.album-gallery img')).toHaveCount(2, {
     timeout: 30_000,
   });
+  const shownPhoto = () =>
+    alice.page.getByRole('dialog').locator('.photo-viewer-image');
+  const readScale = () =>
+    alice.page.locator('.photo-viewer-zoom-content').evaluate(element => {
+      const matrix = new DOMMatrixReadOnly(getComputedStyle(element).transform);
+      return matrix.a;
+    });
 
   // When: opening the thumbnail must not download anything
   let automaticDownload = false;
@@ -1406,94 +1396,38 @@ test('Regressione UI #19: tastiera zoom — Album: anteprima e download esplicit
   await alice.page.getByRole('button', { name: 'Apri Foto 1' }).click();
   await expect(alice.page.getByRole('dialog')).toBeVisible();
   await settleLayout(alice.page);
-  await waitForStableViewer(alice.page);
   alice.page.off('download', rememberDownload);
 
-  // Then: wheel changes the real transform and reset restores the fit
-  const zoomArea = alice.page.locator('.photo-viewer-zoom-area');
-  await expect(zoomArea).toBeVisible();
-  const readTransform = () =>
-    zoomArea.locator('.photo-viewer-zoom-content').evaluate(element => {
-      const matrix = new DOMMatrixReadOnly(getComputedStyle(element).transform);
-      const image = element.querySelector('img')!.getBoundingClientRect();
-      return { scale: matrix.a, width: image.width, x: matrix.e, y: matrix.f };
-    });
-  const initial = await readTransform();
-  await zoomArea.focus();
-  await expect(zoomArea).toBeFocused();
-  await zoomArea.press('+');
-  await expect
-    .poll(async () => (await readTransform()).scale)
-    .toBeGreaterThan(initial.scale);
-  const keyboardZoomed = await readTransform();
-  await zoomArea.press('-');
-  await expect
-    .poll(async () => (await readTransform()).scale)
-    .toBeLessThan(keyboardZoomed.scale);
-  for (let index = 0; index < 16; index++) await zoomArea.press('+');
-  await expect
-    .poll(async () => (await readTransform()).scale)
-    .toBeGreaterThan(initial.scale * 3);
-  const beforePan = await readTransform();
-  await zoomArea.press('ArrowLeft');
-  let afterPan = await readTransform();
-  if (afterPan.x === beforePan.x) {
-    await zoomArea.press('ArrowRight');
-    afterPan = await readTransform();
-  }
-  expect(afterPan.x).not.toBe(beforePan.x);
-  await zoomArea.press('0');
-  await expect
-    .poll(async () => (await readTransform()).scale)
-    .toBeCloseTo(initial.scale, 2);
-  await expect
-    .poll(async () => (await readTransform()).width)
-    .toBeCloseTo(initial.width, 0);
-
-  const area = await zoomArea.boundingBox();
-  expect(area).toBeTruthy();
-  await zoomArea.hover();
-  await alice.page.mouse.move(
-    area!.x + area!.width / 2,
-    area!.y + area!.height / 2,
-  );
-  await zoomArea.dispatchEvent('wheel', {
-    deltaY: -300,
-    clientX: area!.x + area!.width / 2,
-    clientY: area!.y + area!.height / 2,
-  });
-  await expect
-    .poll(async () => (await readTransform()).scale)
-    .toBeGreaterThan(initial.scale);
-  const zoomed = await readTransform();
-  expect(zoomed.width).toBeGreaterThan(initial.width);
-  await zoomArea.dispatchEvent('mousedown', {
-    button: 0,
-    clientX: area!.x + area!.width / 2,
-    clientY: area!.y + area!.height / 2,
-  });
-  await zoomArea.dispatchEvent('mousemove', {
-    buttons: 1,
-    clientX: area!.x + area!.width / 2 - 100,
-    clientY: area!.y + area!.height / 2,
-  });
-  await zoomArea.dispatchEvent('mouseup', {
-    button: 0,
-    clientX: area!.x + area!.width / 2 - 100,
-    clientY: area!.y + area!.height / 2,
-  });
-  await expect.poll(async () => (await readTransform()).x).not.toBe(zoomed.x);
-  await alice.page.getByRole('button', { name: 'Ripristina zoom' }).click();
-  await expect
-    .poll(async () => (await readTransform()).scale)
-    .toBeCloseTo(initial.scale, 2);
+  // Then: only the photo, the counter, download and close are visible
   expect(automaticDownload).toBe(false);
-  await alice.page.getByRole('button', { name: 'Aumenta zoom' }).focus();
-  const toolbarFocused = await readTransform();
-  await alice.page.keyboard.press('ArrowRight');
-  await expect
-    .poll(async () => (await readTransform()).x)
-    .toBeCloseTo(toolbarFocused.x, 0);
+  await expect(shownPhoto()).toHaveAttribute('alt', 'Foto 1');
+  await expect(alice.page.getByText('1 / 2')).toBeVisible();
+  await expect(alice.page.locator('.photo-viewer-bar')).not.toContainText(
+    /rotellina|zoom/i,
+  );
+  await expect(alice.page.getByRole('button', { name: /zoom/i })).toHaveCount(
+    0,
+  );
+
+  // When / Then: Ctrl+wheel zooms the photo, the plain wheel browses
+  const box = await alice.page.locator('.photo-viewer-zoom-area').boundingBox();
+  expect(box).toBeTruthy();
+  await alice.page.mouse.move(
+    box!.x + box!.width / 2,
+    box!.y + box!.height / 2,
+  );
+  expect(await readScale()).toBeCloseTo(1, 2);
+  await alice.page.keyboard.down('Control');
+  await alice.page.mouse.wheel(0, -300);
+  await alice.page.keyboard.up('Control');
+  await expect.poll(readScale).toBeGreaterThan(1);
+  await expect(shownPhoto()).toHaveAttribute('alt', 'Foto 1');
+  await alice.page.mouse.wheel(0, 120);
+  await expect(shownPhoto()).toHaveAttribute('alt', 'Foto 2');
+  await expect(alice.page.getByText('2 / 2')).toBeVisible();
+  expect(await readScale()).toBeCloseTo(1, 2);
+  await alice.page.keyboard.press('ArrowLeft');
+  await expect(shownPhoto()).toHaveAttribute('alt', 'Foto 1');
 
   // When / Then: only the explicit control downloads the file
   const downloadPromise = alice.page.waitForEvent('download');
@@ -1505,55 +1439,46 @@ test('Regressione UI #19: tastiera zoom — Album: anteprima e download esplicit
   await expect(
     alice.page.getByRole('button', { name: 'Apri Foto 1' }),
   ).toBeFocused();
-  // When / Then: landscape images stay centered and controls fit every theme.
+
+  // When / Then: the photo opens centered and unzoomed in every theme and size
   for (const theme of ['light', 'dark', 'retro']) {
     await alice.page
       .getByLabel('Impostazioni Tacitus', { exact: true })
       .click();
     await alice.page.getByLabel('Tema').selectOption(theme);
     await alice.page.keyboard.press('Escape');
-    await settleLayout(alice.page);
-    for (const width of [1280, 390, 320]) {
-      await alice.page.setViewportSize({ width, height: 844 });
+    for (const [width, height] of [
+      [1920, 1080],
+      [393, 852],
+    ]) {
+      await alice.page.setViewportSize({ width, height });
+      if (
+        width < 720 &&
+        !(await alice.page.locator('.album-gallery').isVisible())
+      )
+        await alice.page.getByRole('button', { name: /bob_viewer/ }).click();
       await alice.page.getByRole('button', { name: 'Apri Foto 1' }).click();
-      await waitForStableViewer(alice.page);
-      const geometry = await alice.page
-        .locator('.photo-viewer-stage')
-        .evaluate(stage => {
-          const rect = stage.getBoundingClientRect();
-          const image = stage
-            .querySelector('.photo-viewer-image')!
-            .getBoundingClientRect();
-          const dialog = stage.closest('[role="dialog"]')!;
-          return {
-            xOffset: Math.abs(
-              image.x + image.width / 2 - rect.x - rect.width / 2,
-            ),
-            yOffset: Math.abs(
-              image.y + image.height / 2 - rect.y - rect.height / 2,
-            ),
-            inside:
-              image.width <= rect.width + 1 && image.height <= rect.height + 1,
-            overflow:
-              dialog.scrollWidth > dialog.clientWidth ||
-              dialog.scrollHeight > dialog.clientHeight,
-          };
-        });
-      expect(
-        geometry.xOffset,
-        `${theme} ${width}px: ${JSON.stringify(geometry)}`,
-      ).toBeLessThanOrEqual(1);
-      expect(
-        geometry.yOffset,
-        `${theme} ${width}px: ${JSON.stringify(geometry)}`,
-      ).toBeLessThanOrEqual(1);
-      expect(geometry.inside).toBe(true);
-      expect(geometry.overflow).toBe(false);
-      await expect(
-        alice.page.getByRole('button', { name: 'Chiudi', exact: true }),
-      ).toHaveCount(1);
+      await settleLayout(alice.page);
+      const geometry = await shownPhoto().evaluate(image => {
+        const rect = image.getBoundingClientRect();
+        return {
+          xOffset: Math.abs(rect.x + rect.width / 2 - innerWidth / 2),
+          inside:
+            rect.left >= 0 &&
+            rect.top >= 0 &&
+            rect.right <= innerWidth &&
+            rect.bottom <= innerHeight,
+          upscaled: rect.width > (image as HTMLImageElement).naturalWidth + 1,
+        };
+      });
+      const label = `${theme} ${width}px: ${JSON.stringify(geometry)}`;
+      expect(geometry.xOffset, label).toBeLessThanOrEqual(1);
+      expect(geometry.inside, label).toBe(true);
+      expect(geometry.upscaled, label).toBe(false);
+      expect(await readScale(), label).toBeCloseTo(1, 2);
       await alice.page.keyboard.press('Escape');
     }
+    await alice.page.setViewportSize({ width: 1280, height: 720 });
   }
   await closePersonas(alice, bob);
 });

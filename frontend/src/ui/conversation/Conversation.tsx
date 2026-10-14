@@ -1,7 +1,7 @@
 import { AlbumGallery } from './Album';
 import { ArrowLeft } from 'lucide-react';
 import type { TacitusId } from '../../domain/tacitusId';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useConversazioneAttiva } from '../../application/hooks/useConversazioneAttiva';
 import { useRelazioni } from '../../application/hooks/useRelazioni';
 import { useScambioMessaggi } from '../../application/hooks/useScambioMessaggi';
@@ -13,15 +13,24 @@ import { MAX_MESSAGE_LENGTH, type Messaggio } from '../../domain/messaggi';
 import type { Contatto, Relazione } from '../../domain/relazioni';
 import ContactSettingsDialog from '../contacts/ContactSettingsDialog';
 import { Button } from '../kit/Button';
+import PhotoViewer, { type Photo } from '../kit/PhotoViewer';
 import MessageComposer from './MessageComposer';
 
 type MessageProps = {
   message: Messaggio;
   tacitusId: TacitusId;
   showTimestamp: boolean;
+  onAlbumLoaded: (id: string, images: readonly string[]) => void;
+  onOpenPhoto: (albumId: string, index: number) => void;
 };
 
-const Message = ({ message, tacitusId, showTimestamp }: MessageProps) => (
+const Message = ({
+  message,
+  onAlbumLoaded,
+  onOpenPhoto,
+  showTimestamp,
+  tacitusId,
+}: MessageProps) => (
   <article
     className={`message ${message.direzione === 'ricevuto' ? 'incoming' : 'outgoing'}`}>
     {message.album ? (
@@ -29,6 +38,8 @@ const Message = ({ message, tacitusId, showTimestamp }: MessageProps) => (
         key={`${tacitusId}-${message.album.id}`}
         tacitusId={tacitusId}
         id={message.album.id}
+        onLoaded={onAlbumLoaded}
+        onOpen={onOpenPhoto}
       />
     ) : (
       <p>{message.testo}</p>
@@ -44,6 +55,26 @@ const Message = ({ message, tacitusId, showTimestamp }: MessageProps) => (
     )}
   </article>
 );
+
+type AlbumPhoto = Photo & Readonly<{ albumId: string; index: number }>;
+
+type PhotoSelection = Readonly<{ albumId: string; index: number }>;
+
+const albumPhotos = (
+  messages: readonly Messaggio[],
+  albums: Readonly<Record<string, readonly string[]>>,
+): AlbumPhoto[] =>
+  messages.flatMap(message => {
+    const album = message.album;
+    if (!album) return [];
+    return (albums[album.id] ?? []).map((src, index) => ({
+      albumId: album.id,
+      index,
+      src,
+      alt: `Foto ${index + 1}`,
+      downloadName: `foto-${index + 1}.webp`,
+    }));
+  });
 
 type ConversationContentProps = {
   contact: Contatto;
@@ -79,8 +110,31 @@ const ConversationContent = ({
   const { riattiva } = useRelazioni();
   const { aggiornaBozza, invia } = useScambioMessaggi(contact.tacitusId);
   const messagesEnd = useRef<HTMLDivElement>(null);
+  const [albums, setAlbums] = useState<
+    Readonly<Record<string, readonly string[]>>
+  >({});
+  const [selectedPhoto, setSelectedPhoto] = useState<PhotoSelection>();
+  const photos = albumPhotos(conversation.messaggi, albums);
+  const selectedIndex = selectedPhoto
+    ? photos.findIndex(
+        photo =>
+          photo.albumId === selectedPhoto.albumId &&
+          photo.index === selectedPhoto.index,
+      )
+    : -1;
 
   const reactivate = () => riattiva(contact.tacitusId);
+  const rememberAlbum = useCallback(
+    (id: string, images: readonly string[]) =>
+      setAlbums(current => ({ ...current, [id]: images })),
+    [],
+  );
+  const openPhoto = useCallback(
+    (albumId: string, index: number) => setSelectedPhoto({ albumId, index }),
+    [],
+  );
+  const showPhoto = (index: number) => setSelectedPhoto(photos[index]);
+  const closePhoto = () => setSelectedPhoto(undefined);
 
   useEffect(() => {
     const history = messagesEnd.current?.parentElement;
@@ -127,10 +181,18 @@ const ConversationContent = ({
             showTimestamp={
               conversation.messaggi[index + 1]?.direzione !== message.direzione
             }
+            onAlbumLoaded={rememberAlbum}
+            onOpenPhoto={openPhoto}
           />
         ))}
         <div ref={messagesEnd} />
       </div>
+      <PhotoViewer
+        photos={photos}
+        index={selectedIndex === -1 ? undefined : selectedIndex}
+        onIndexChange={showPhoto}
+        onClose={closePhoto}
+      />
       <div className="conversation-composer">
         <MessageComposer
           key={contact.tacitusId}
@@ -159,6 +221,7 @@ const Conversation = () => {
     <section className="conversation">
       {conversazioneAttiva ? (
         <ConversationContent
+          key={conversazioneAttiva.contatto.tacitusId}
           contact={conversazioneAttiva.contatto}
           contactIntentPending={conversazioneAttiva.intentoInCorso}
           conversation={conversazioneAttiva.conversazione}

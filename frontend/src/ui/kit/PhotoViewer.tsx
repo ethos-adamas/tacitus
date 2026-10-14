@@ -1,258 +1,197 @@
-import { useEffect, useId, useState, type SyntheticEvent } from 'react';
-import { Download, Minus, Plus, RotateCcw } from 'lucide-react';
+import {
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type TouchEvent,
+  type WheelEvent,
+} from 'react';
+import { Download, X } from 'lucide-react';
+import * as DialogPrimitive from 'radix-ui';
 import {
   TransformComponent,
   TransformWrapper,
-  type ReactZoomPanPinchRef,
+  type ReactZoomPanPinchContentRef,
 } from 'react-zoom-pan-pinch';
 import { Button, DownloadLink } from './Button';
-import { Modal } from './Modal';
 
-type PhotoViewerProps = {
+export type Photo = Readonly<{
   src: string;
   alt: string;
   downloadName: string;
+}>;
+
+type PhotoViewerProps = {
+  photos: readonly Photo[];
+  index: number | undefined;
+  onIndexChange: (index: number) => void;
+  onClose: () => void;
 };
 
-type Size = { width: number; height: number };
+// A pause this long between wheel events starts a new gesture: one photo per gesture.
+const WHEEL_GESTURE_GAP_MS = 200;
+const SWIPE_DISTANCE_PX = 60;
+const MAX_ZOOM = 4;
 
-export type Fit = { fit: number; x: number; y: number };
+const PhotoViewer = ({
+  index,
+  onClose,
+  onIndexChange,
+  photos,
+}: PhotoViewerProps) => {
+  const zoom = useRef<ReactZoomPanPinchContentRef>(null);
+  const lastWheel = useRef(Number.NEGATIVE_INFINITY);
+  const touchStart = useRef<{ x: number; y: number } | undefined>(undefined);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const [failed, setFailed] = useState<string>();
+  const photo = index === undefined ? undefined : photos[index];
 
-export const calculateFit = (
-  stageWidth: number,
-  stageHeight: number,
-  imageWidth: number,
-  imageHeight: number,
-): Fit | undefined => {
-  if (
-    stageWidth <= 0 ||
-    stageHeight <= 0 ||
-    imageWidth <= 0 ||
-    imageHeight <= 0
-  )
-    return undefined;
-  const fit = Math.min(1, stageWidth / imageWidth, stageHeight / imageHeight);
-  return {
-    fit,
-    x: (stageWidth - imageWidth * fit) / 2,
-    y: (stageHeight - imageHeight * fit) / 2,
-  };
-};
-
-const roundedSizeKey = (size: Size, stage: Size) =>
-  `${Math.round(size.width)}-${Math.round(size.height)}-${Math.round(stage.width)}-${Math.round(stage.height)}`;
-
-const PhotoViewer = ({ alt, downloadName, src }: PhotoViewerProps) => {
-  const [open, setOpen] = useState(false);
-  const [natural, setNatural] = useState<Size>();
-  const [stage, setStage] = useState<Size>();
-  const [decodeError, setDecodeError] = useState(false);
-  const [scale, setScale] = useState(0);
-  const [transform, setTransform] = useState<ReactZoomPanPinchRef>();
-  const [stageElement, setStageElement] = useState<HTMLDivElement | null>(null);
-  const keyboardHelpId = useId();
-  const fit =
-    natural && stage
-      ? calculateFit(stage.width, stage.height, natural.width, natural.height)
-      : undefined;
-
-  useEffect(() => {
-    if (!open) {
-      setNatural(undefined);
-      setStage(undefined);
-      setDecodeError(false);
-      setScale(0);
-      setTransform(undefined);
-      return;
-    }
-    if (!stageElement) return;
-    const measure = () => {
-      const rect = stageElement.getBoundingClientRect();
-      const next = { width: rect.width, height: rect.height };
-      setStage(current =>
-        current?.width === next.width && current.height === next.height
-          ? current
-          : next,
-      );
-    };
-    measure();
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(stageElement);
-    return () => observer.disconnect();
-  }, [open, stageElement]);
-
-  const loadNaturalSize = (event: SyntheticEvent<HTMLImageElement>) => {
-    const image = event.currentTarget;
-    if (image.naturalWidth > 0 && image.naturalHeight > 0) {
-      setDecodeError(false);
-      setNatural({ width: image.naturalWidth, height: image.naturalHeight });
-    } else setDecodeError(true);
+  const zoomed = () => (zoom.current?.state.scale ?? 1) > 1.001;
+  const show = (step: number) => {
+    if (index === undefined) return;
+    const next = index + step;
+    if (next >= 0 && next < photos.length) onIndexChange(next);
   };
 
-  const imageError = () => {
-    setDecodeError(true);
-    setNatural(undefined);
-    setScale(0);
+  const changeOpen = (open: boolean) => {
+    if (!open) onClose();
   };
-
-  const minScale = fit?.fit ?? 0;
-  const displayedScale = scale || minScale;
-  const maxScale = minScale * 4;
-  const step = minScale * 0.2;
-  const zoomInDisabled = !transform || scale >= maxScale - 0.001;
-  const zoomOutDisabled = !transform || scale <= minScale + 0.001;
-  const zoomIn = () => {
-    if (transform) void transform.zoomIn(step, 0);
+  const rememberFocus = () => {
+    returnFocus.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
   };
-  const zoomOut = () => {
-    if (transform) void transform.zoomOut(step, 0);
+  const restoreFocus = (event: Event) => {
+    event.preventDefault();
+    returnFocus.current?.focus();
   };
-  const reset = () => {
-    if (transform && fit) void transform.setTransform(fit.x, fit.y, fit.fit, 0);
+  // Ctrl/⌘ + wheel (and trackpad pinch, which sets ctrlKey) belongs to the zoom.
+  const browseWithWheel = (event: WheelEvent) => {
+    if (event.ctrlKey || event.metaKey) return;
+    const delta =
+      Math.abs(event.deltaY) >= Math.abs(event.deltaX)
+        ? event.deltaY
+        : event.deltaX;
+    const newGesture =
+      event.timeStamp - lastWheel.current > WHEEL_GESTURE_GAP_MS;
+    lastWheel.current = event.timeStamp;
+    if (delta && newGesture) show(delta > 0 ? 1 : -1);
   };
-  const initializeTransform = (ref: ReactZoomPanPinchRef) => {
-    setTransform(() => ref);
+  const browseWithKeyboard = (event: KeyboardEvent) => {
+    if (event.key === 'ArrowRight' || event.key === 'PageDown') show(1);
+    else if (event.key === 'ArrowLeft' || event.key === 'PageUp') show(-1);
+    else if (event.key === '+' || event.key === '=')
+      zoom.current?.zoomIn(0.5, 0);
+    else if (event.key === '-') zoom.current?.zoomOut(0.5, 0);
+    else if (event.key === '0') zoom.current?.resetTransform(0);
   };
-  const updateTransform = (
-    _ref: ReactZoomPanPinchRef,
-    state: { scale: number; positionX: number; positionY: number },
-  ) => {
-    setScale(state.scale);
+  const startSwipe = (event: TouchEvent) => {
+    const touch = event.touches[0];
+    touchStart.current =
+      event.touches.length === 1 && !zoomed()
+        ? { x: touch.clientX, y: touch.clientY }
+        : undefined;
   };
+  const endSwipe = (event: TouchEvent) => {
+    const start = touchStart.current;
+    const touch = event.changedTouches[0];
+    touchStart.current = undefined;
+    if (!start || !touch) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) > SWIPE_DISTANCE_PX && Math.abs(dx) > Math.abs(dy))
+      show(dx < 0 ? 1 : -1);
+  };
+  const closeOnBackground = (event: MouseEvent) => {
+    if (!(event.target instanceof HTMLImageElement) && !zoomed()) onClose();
+  };
+  const markFailed = () => setFailed(photo?.src);
 
   return (
-    <Modal
-      open={open}
-      onOpenChange={setOpen}
-      trigger={
-        <Button
-          type="button"
-          variant="ghost"
-          className="album-photo"
-          aria-label={`Apri ${alt}`}>
-          <img src={src} alt={alt} loading="lazy" />
-        </Button>
-      }
-      title={alt}
-      description="Usa la rotellina o due dita per lo zoom."
-      size="image">
-      <div className="photo-viewer">
-        <div className="photo-viewer-stage" ref={setStageElement}>
-          {decodeError && (
-            <p className="photo-viewer-error" role="alert">
-              Impossibile visualizzare questa foto.
-            </p>
+    <DialogPrimitive.Dialog.Root
+      open={photo !== undefined}
+      onOpenChange={changeOpen}>
+      <DialogPrimitive.Dialog.Portal>
+        <DialogPrimitive.Dialog.Overlay className="photo-viewer-backdrop" />
+        <DialogPrimitive.Dialog.Content
+          className="photo-viewer"
+          onOpenAutoFocus={rememberFocus}
+          onCloseAutoFocus={restoreFocus}
+          onWheel={browseWithWheel}
+          onKeyDown={browseWithKeyboard}>
+          {photo && index !== undefined && (
+            <>
+              <DialogPrimitive.Dialog.Title className="sr-only">
+                {photo.alt}
+              </DialogPrimitive.Dialog.Title>
+              <DialogPrimitive.Dialog.Description className="sr-only">
+                Ctrl e rotellina o pizzico per lo zoom; rotellina, frecce o
+                scorrimento per cambiare foto.
+              </DialogPrimitive.Dialog.Description>
+              <div
+                className="photo-viewer-stage"
+                onClick={closeOnBackground}
+                onTouchStart={startSwipe}
+                onTouchEnd={endSwipe}>
+                {failed === photo.src ? (
+                  <p className="photo-viewer-error" role="alert">
+                    Impossibile visualizzare questa foto.
+                  </p>
+                ) : (
+                  <TransformWrapper
+                    key={index}
+                    ref={zoom}
+                    minScale={1}
+                    maxScale={MAX_ZOOM}
+                    limitToBounds
+                    wheel={{ step: 0.1, activationKeys: ['Control'] }}
+                    trackPadPanning={{ disabled: true }}
+                    doubleClick={{ mode: 'toggle', step: 1 }}
+                    panning={{ velocityDisabled: true }}>
+                    <TransformComponent
+                      wrapperClass="photo-viewer-zoom-area"
+                      contentClass="photo-viewer-zoom-content">
+                      <img
+                        className="photo-viewer-image"
+                        src={photo.src}
+                        alt={photo.alt}
+                        draggable={false}
+                        onError={markFailed}
+                      />
+                    </TransformComponent>
+                  </TransformWrapper>
+                )}
+              </div>
+              <div className="photo-viewer-bar">
+                {photos.length > 1 && (
+                  <span className="photo-viewer-count" aria-live="polite">
+                    {index + 1} / {photos.length}
+                  </span>
+                )}
+                <DownloadLink
+                  className="photo-viewer-action"
+                  href={photo.src}
+                  download={photo.downloadName}
+                  aria-label="Scarica foto"
+                  title="Scarica foto">
+                  <Download size={22} aria-hidden="true" />
+                </DownloadLink>
+                <DialogPrimitive.Dialog.Close asChild>
+                  <Button
+                    variant="ghost"
+                    className="photo-viewer-action"
+                    aria-label="Chiudi"
+                    title="Chiudi">
+                    <X size={24} aria-hidden="true" />
+                  </Button>
+                </DialogPrimitive.Dialog.Close>
+              </div>
+            </>
           )}
-          {!decodeError && (!natural || !fit) && (
-            <img
-              className="photo-viewer-preload"
-              src={src}
-              alt=""
-              aria-hidden="true"
-              onLoad={loadNaturalSize}
-              onError={imageError}
-            />
-          )}
-          {!decodeError && fit && natural && stage && (
-            <TransformWrapper
-              key={`${src}-${roundedSizeKey(natural, stage)}`}
-              initialScale={fit.fit}
-              minScale={fit.fit}
-              maxScale={fit.fit * 4}
-              initialPositionX={fit.x}
-              initialPositionY={fit.y}
-              limitToBounds
-              centerZoomedOut
-              wheel={{
-                disabled: false,
-                step: 0.1,
-                touchPadDisabled: true,
-                wheelDisabled: false,
-              }}
-              pinch={{ step: 5, allowPanning: true }}
-              panning={{ velocityDisabled: true }}
-              trackPadPanning={{ disabled: true }}
-              doubleClick={{ disabled: true }}
-              zoomAnimation={{ disabled: true }}
-              velocityAnimation={{ disabled: true }}
-              autoAlignment={{ disabled: true, animationTime: 0 }}
-              keyboard={{
-                disabled: false,
-                panStep: 40,
-                zoomStep: fit.fit * 0.2,
-                animationTime: 0,
-              }}
-              onInit={initializeTransform}
-              onTransform={updateTransform}>
-              <TransformComponent
-                wrapperClass="photo-viewer-zoom-area"
-                contentClass="photo-viewer-zoom-content"
-                contentStyle={{ width: natural.width, height: natural.height }}
-                wrapperProps={{
-                  tabIndex: 0,
-                  'aria-label': 'Foto ingrandita',
-                  'aria-describedby': keyboardHelpId,
-                }}>
-                <img
-                  className="photo-viewer-image"
-                  src={src}
-                  alt={alt}
-                  width={natural.width}
-                  height={natural.height}
-                  draggable={false}
-                  onError={imageError}
-                />
-              </TransformComponent>
-            </TransformWrapper>
-          )}
-        </div>
-        <div className="photo-viewer-toolbar" aria-label="Controlli foto">
-          <small id={keyboardHelpId} className="photo-viewer-keyboard-help">
-            Rotellina o due dita per lo zoom. +/− ingrandisci, frecce spostano,
-            0 ripristina.
-          </small>
-          <Button
-            type="button"
-            onClick={zoomOut}
-            disabled={zoomOutDisabled}
-            variant="ghost"
-            className="icon-button"
-            aria-label="Riduci zoom">
-            <Minus size={20} aria-hidden="true" />
-          </Button>
-          <output aria-label="Zoom foto">
-            {minScale ? Math.round((displayedScale / minScale) * 100) : 100}%
-          </output>
-          <Button
-            type="button"
-            onClick={zoomIn}
-            disabled={zoomInDisabled}
-            variant="ghost"
-            className="icon-button"
-            aria-label="Aumenta zoom">
-            <Plus size={20} aria-hidden="true" />
-          </Button>
-          <Button
-            type="button"
-            onClick={reset}
-            variant="ghost"
-            className="icon-button"
-            title="Ripristina zoom"
-            aria-label="Ripristina zoom">
-            <RotateCcw size={20} aria-hidden="true" />
-          </Button>
-          <DownloadLink
-            href={src}
-            download={downloadName}
-            aria-label="Scarica foto"
-            title="Scarica foto">
-            <Download size={20} aria-hidden="true" />
-            <span>Scarica foto</span>
-          </DownloadLink>
-        </div>
-      </div>
-    </Modal>
+        </DialogPrimitive.Dialog.Content>
+      </DialogPrimitive.Dialog.Portal>
+    </DialogPrimitive.Dialog.Root>
   );
 };
 
