@@ -62,6 +62,12 @@ npm run build
 
 I vettori di interoperabilità handshake/ratchet sono testati nativamente in `protocol/tests/protocol.rs`. Vitest copre dominio, reducer, listener, adapter e UI; Playwright esercita gli use case completi contro il Relay locale su Chromium desktop e viewport mobile.
 
+### Prestazioni
+
+`npm run test:perf` riempie una Conversazione e misura la latenza tasto→frame del compositore per ogni passo di cronologia (`TACITUS_PERF_HISTORY=0,200,500`). Su Chromium rallenta la CPU 4× e attribuisce il tempo CPU alle funzioni dell'app; `TACITUS_PERF_BROWSER=firefox` misura solo la latenza. Contro il dev server l'attribuzione è leggibile ma React dev gonfia i tempi: per numeri realistici avviare prima `npx vite preview --host 127.0.0.1 --port 5173` dopo `npm run build`, che Playwright riusa.
+
+Sul client in esecuzione, `localStorage.setItem('tacitus.perf', '1')` seguito da un reload registra in console i frame lunghi (solo Chromium) e gli eventi di input oltre 50 ms con attesa, handler e rendering.
+
 ## Versione e interfaccia
 
 `package.json` è la fonte della versione mostrata nel brand e della versione dell'app Tauri (`src-tauri/tauri.conf.json` la legge direttamente). Il brand resta visibile su mobile. Tema, notifiche e cancellazione dati sono raccolti sotto l'ingranaggio Impostazioni.

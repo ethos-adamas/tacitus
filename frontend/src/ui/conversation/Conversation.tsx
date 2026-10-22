@@ -1,7 +1,7 @@
 import { AlbumGallery } from './Album';
 import { ArrowLeft } from 'lucide-react';
 import type { TacitusId } from '../../domain/tacitusId';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useConversazioneAttiva } from '../../application/hooks/useConversazioneAttiva';
 import { useRelazioni } from '../../application/hooks/useRelazioni';
 import { useScambioMessaggi } from '../../application/hooks/useScambioMessaggi';
@@ -25,36 +25,61 @@ type MessageProps = {
   onOpenPhoto: (albumId: string, index: number) => void;
 };
 
-const Message = ({
-  message,
-  onAlbumLoaded,
-  onOpenPhoto,
-  showTimestamp,
-  tacitusId,
-}: MessageProps) => (
-  <article
-    className={`message ${message.direzione === 'ricevuto' ? 'incoming' : 'outgoing'}`}>
-    {message.album ? (
-      <AlbumGallery
-        key={`${tacitusId}-${message.album.id}`}
+// Memoized: a new Messaggio must not re-render the ones already in the history.
+const Message = memo(
+  ({
+    message,
+    onAlbumLoaded,
+    onOpenPhoto,
+    showTimestamp,
+    tacitusId,
+  }: MessageProps) => (
+    <article
+      className={`message ${message.direzione === 'ricevuto' ? 'incoming' : 'outgoing'}`}>
+      {message.album ? (
+        <AlbumGallery
+          key={`${tacitusId}-${message.album.id}`}
+          tacitusId={tacitusId}
+          id={message.album.id}
+          onLoaded={onAlbumLoaded}
+          onOpen={onOpenPhoto}
+        />
+      ) : (
+        <p>{message.testo}</p>
+      )}
+      {showTimestamp && (
+        <time dateTime={new Date(message.creatoIl).toISOString()}>
+          {new Date(message.creatoIl).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          })}
+        </time>
+      )}
+    </article>
+  ),
+);
+
+type MessageHistoryProps = {
+  messages: readonly Messaggio[];
+  tacitusId: TacitusId;
+  onAlbumLoaded: (id: string, images: readonly string[]) => void;
+  onOpenPhoto: (albumId: string, index: number) => void;
+};
+
+// Memoized: every keystroke stores the draft and re-renders the Conversazione, the history must not follow.
+const MessageHistory = memo(
+  ({ messages, onAlbumLoaded, onOpenPhoto, tacitusId }: MessageHistoryProps) =>
+    messages.map((message, index) => (
+      <Message
+        key={message.id}
+        message={message}
         tacitusId={tacitusId}
-        id={message.album.id}
-        onLoaded={onAlbumLoaded}
-        onOpen={onOpenPhoto}
+        showTimestamp={messages[index + 1]?.direzione !== message.direzione}
+        onAlbumLoaded={onAlbumLoaded}
+        onOpenPhoto={onOpenPhoto}
       />
-    ) : (
-      <p>{message.testo}</p>
-    )}
-    {showTimestamp && (
-      <time dateTime={new Date(message.creatoIl).toISOString()}>
-        {new Date(message.creatoIl).toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-        })}
-      </time>
-    )}
-  </article>
+    )),
 );
 
 type AlbumPhoto = Photo & Readonly<{ albumId: string; index: number }>;
@@ -115,7 +140,10 @@ const ConversationContent = ({
     Readonly<Record<string, readonly string[]>>
   >({});
   const [selectedPhoto, setSelectedPhoto] = useState<PhotoSelection>();
-  const photos = albumPhotos(conversation.messaggi, albums);
+  const photos = useMemo(
+    () => albumPhotos(conversation.messaggi, albums),
+    [albums, conversation.messaggi],
+  );
   const selectedIndex = selectedPhoto
     ? photos.findIndex(
         photo =>
@@ -176,18 +204,12 @@ const ConversationContent = ({
         {conversation.messaggi.length === 0 && (
           <p className="empty">La Conversazione è vuota.</p>
         )}
-        {conversation.messaggi.map((message, index) => (
-          <Message
-            key={message.id}
-            message={message}
-            tacitusId={contact.tacitusId}
-            showTimestamp={
-              conversation.messaggi[index + 1]?.direzione !== message.direzione
-            }
-            onAlbumLoaded={rememberAlbum}
-            onOpenPhoto={openPhoto}
-          />
-        ))}
+        <MessageHistory
+          messages={conversation.messaggi}
+          tacitusId={contact.tacitusId}
+          onAlbumLoaded={rememberAlbum}
+          onOpenPhoto={openPhoto}
+        />
         <div ref={messagesEnd} />
       </div>
       <PhotoViewer
