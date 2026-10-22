@@ -227,6 +227,12 @@ const EmojiComposer = ({
     let frame = 0;
     let width = textarea.clientWidth;
     const resize = () => {
+      // Resetting the height relayouts the whole Conversazione: skip it while one line still fits.
+      if (
+        textarea.style.height === '48px' &&
+        textarea.scrollHeight <= textarea.clientHeight
+      )
+        return;
       textarea.style.height = 'auto';
       textarea.style.height = `${Math.max(48, Math.min(textarea.scrollHeight, 144))}px`;
     };
