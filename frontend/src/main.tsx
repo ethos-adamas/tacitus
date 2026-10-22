@@ -10,6 +10,9 @@ import '@fontsource/courier-prime/latin-400.css';
 import '@fontsource/vt323/latin-400.css';
 import { store } from './application/store/store';
 import AppErrorBoundary from './ui/AppErrorBoundary';
+import { startPerformanceMonitor } from './infrastructure/performance/performanceMonitor';
+
+startPerformanceMonitor();
 await initProtocol();
 
 createRoot(document.getElementById('root')!).render(
